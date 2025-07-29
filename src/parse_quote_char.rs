@@ -58,6 +58,7 @@ pub fn parse_quote_char(state: &mut JSONState) -> Result<Token, JSONParseError> 
                 Ok(Token::OpenStringData)
             }
         },
+        _ => Err(JSONParseError::)
     }
 }
 

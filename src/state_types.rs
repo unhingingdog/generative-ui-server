@@ -13,10 +13,11 @@ pub enum PrimValue {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum BraceState {
-    InKey(StringState),
-    InValue(PrimValue),
+    Empty,
     ExpectingKey,
+    InKey(StringState),
     ExpectingValue,
+    InValue(PrimValue),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -29,6 +30,7 @@ pub enum BracketState {
 pub enum JSONState {
     Brace(BraceState),
     Bracket(BracketState),
+    Pending,
 }
 
 #[derive(Debug, PartialEq, Clone)]

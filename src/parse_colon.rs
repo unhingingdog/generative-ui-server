@@ -42,6 +42,7 @@ pub fn parse_colon(current_state: &mut JSONState) -> Result<Token, JSONParseErro
             }
             _ => Err(JSONParseError::UnexpectedColon),
         },
+        _ => Err(JSONParseError::UnexpectedColon),
     }
 }
 

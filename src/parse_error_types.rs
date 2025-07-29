@@ -7,5 +7,7 @@ pub enum JSONParseError {
     UnexpectedEscape,
     UnexpectedComma,
     UnexpectedColon,
+    UnexpectedOpenBrace,
+    UnexpectedCloseBrace,
     TokenParseErrorMisc(&'static str),
 }

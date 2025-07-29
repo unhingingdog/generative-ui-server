@@ -54,6 +54,7 @@ pub fn parse_comma(current_state: &mut JSONState) -> Result<Token, JSONParseErro
             // Case 4: All other states are invalid for a comma.
             _ => Err(JSONParseError::UnexpectedComma),
         },
+        _ => Err(JSONParseError::UnexpectedComma),
     }
 }
 

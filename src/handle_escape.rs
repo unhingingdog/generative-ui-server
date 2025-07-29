@@ -21,6 +21,7 @@ pub fn handle_escape(current_state: &mut JSONState) -> Result<Token, JSONParseEr
             }
             _ => Err(JSONParseError::UnexpectedEscape),
         },
+        _ => Err(JSONParseError::UnexpectedEscape),
     }
 }
 

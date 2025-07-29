@@ -39,6 +39,7 @@ pub fn parse_non_string_data(state: &mut JSONState) -> Result<Token, JSONParseEr
             BracketState::InValue(PrimValue::NonString) => Ok(Token::NonStringData),
             _ => Err(JSONParseError::UnexpectedCharInNonStringData),
         },
+        _ => Err(JSONParseError::UnexpectedCharInNonStringData),
     }
 }
 
