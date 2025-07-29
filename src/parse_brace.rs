@@ -15,6 +15,7 @@ pub fn parse_brace(
                     Ok(Token::OpenBrace)
                 }
                 // This is the start of a nested object.
+                // TODO: this is wrong. needs to handle ExpectingKey state.
                 JSONState::Brace(BraceState::ExpectingValue)
                 | JSONState::Bracket(BracketState::ExpectingValue) => {
                     *current_state = JSONState::Brace(BraceState::Empty);
