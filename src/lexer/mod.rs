@@ -11,5 +11,6 @@ mod non_string_data;
 mod quote;
 mod string_data;
 
+pub(crate) use dispatcher::parse_char;
 pub(crate) use lexer_error_types::JSONParseError;
 pub(crate) use lexer_types::Token;

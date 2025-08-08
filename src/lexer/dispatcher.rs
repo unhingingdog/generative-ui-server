@@ -95,7 +95,7 @@ mod tests {
         // and does not change the state.
         let result = parse_char('{', &mut state);
 
-        assert_eq!(result, Ok(Token::OpenStringData));
+        assert_eq!(result, Ok(Token::StringContent));
         // The state should not have changed, proving `parse_brace` was not called.
         assert_eq!(state, original_state);
     }

@@ -5,13 +5,14 @@ pub enum RecursiveStructureType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    OpenBrace,    // '{' : puts into BraceState
-    CloseBrace,   // '}' : exits braceState or pops off stack if hit as first current state
-    OpenBracket,  // '[' :
-    CloseBracket, // ']'
-    OpenKey,      // '"' if not already open
-    CloseKey,     // '"' if already open
-    OpenStringData,
+    OpenBrace,      // '{' : puts into BraceState
+    CloseBrace,     // '}' : exits braceState or pops off stack if hit as first current state
+    OpenBracket,    // '[' :
+    CloseBracket,   // ']'
+    OpenKey,        // '"' if not already open
+    CloseKey,       // '"' if already open
+    OpenStringData, //
+    StringContent,
     CloseStringData,
     NonStringData, // on hitting first char of a number or null in a value
     Comma,         // ','

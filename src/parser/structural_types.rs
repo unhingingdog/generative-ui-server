@@ -1,9 +1,14 @@
 use crate::lexer::Token;
 
 #[derive(Debug, PartialEq)]
+pub enum BalancingError {
+    NotClosable,
+    Corrupted,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum TokenProcessingError {
     NotAStructuralToken,
-    NotClosable,
     NotAnOpeningOrClosingToken,
     NotAnOpeningToken,
     NotAClosingToken,
@@ -36,9 +41,11 @@ impl TryFrom<&Token> for StructuralToken {
             Token::OpenStringData => Ok(StructuralToken::OpenStringData),
             Token::CloseStringData => Ok(StructuralToken::CloseStringData),
 
-            Token::NonStringData | Token::Comma | Token::Colon | Token::Whitespace => {
-                Err(TokenProcessingError::NotAStructuralToken)
-            }
+            Token::NonStringData
+            | Token::StringContent
+            | Token::Comma
+            | Token::Colon
+            | Token::Whitespace => Err(TokenProcessingError::NotAStructuralToken),
         }
     }
 }

@@ -18,7 +18,7 @@ pub fn parse_brace(
                 }
                 // This is the start of a nested object, which is a valid value.
                 JSONState::Brace(BraceState::ExpectingValue)
-                | JSONState::Bracket(BracketState::ExpectingValue) => {
+                | JSONState::Bracket(BracketState::Empty | BracketState::ExpectingValue) => {
                     *current_state = JSONState::Brace(BraceState::Empty);
                     Ok(Token::OpenBrace)
                 }
@@ -56,6 +56,10 @@ pub fn parse_brace(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::lexer_error_types::JSONParseError;
+    use crate::parser::state_types::{
+        BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState,
+    };
 
     // Helper functions to create states for tests
     fn brace_state(state: BraceState) -> JSONState {
@@ -93,6 +97,15 @@ mod tests {
     }
 
     #[test]
+    fn test_open_brace_in_empty_bracket() {
+        // This test specifically covers the bug fix.
+        let mut state = bracket_state(BracketState::Empty);
+        let result = parse_brace(RecursiveStructureType::Open, &mut state);
+        assert_eq!(result, Ok(Token::OpenBrace));
+        assert_eq!(state, brace_state(BraceState::Empty));
+    }
+
+    #[test]
     fn test_error_open_brace_in_string_key() {
         let mut state = brace_state(BraceState::InKey(StringState::Open));
         let result = parse_brace(RecursiveStructureType::Open, &mut state);
@@ -110,7 +123,6 @@ mod tests {
 
     #[test]
     fn test_error_close_brace_after_dangling_comma() {
-        // This test now correctly fails, preventing `{"key":"val",}`
         let mut state = brace_state(BraceState::ExpectingKey);
         let result = parse_brace(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Err(JSONParseError::UnexpectedCloseBrace));

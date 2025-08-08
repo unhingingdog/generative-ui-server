@@ -1,11 +1,6 @@
 use crate::JSONState;
 
-use super::structural_types::ClosingToken;
-
-#[derive(Debug, PartialEq)]
-pub enum BalancingError {
-    NotClosable,
-}
+use super::structural_types::{BalancingError, ClosingToken};
 
 pub fn get_balancing_chars(
     closing_stack: &[ClosingToken],
