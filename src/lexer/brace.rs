@@ -9,44 +9,48 @@ pub fn parse_brace(
 ) -> Result<Token, JSONParseError> {
     match brace {
         RecursiveStructureType::Open => {
-            // An open brace is valid only when a value is expected, or at the start.
+            // An open brace is valid at start, or wherever a value is expected.
             match current_state {
-                // This is the start of the JSON document.
                 JSONState::Pending => {
                     *current_state = JSONState::Brace(BraceState::Empty);
                     Ok(Token::OpenBrace)
                 }
-                // This is the start of a nested object, which is a valid value.
                 JSONState::Brace(BraceState::ExpectingValue)
                 | JSONState::Bracket(BracketState::Empty | BracketState::ExpectingValue) => {
                     *current_state = JSONState::Brace(BraceState::Empty);
                     Ok(Token::OpenBrace)
                 }
-                // It's an error to open a brace in any other context. This correctly
-                // handles states like `ExpectingKey` or `Empty`, because an object
-                // cannot be a key in JSON.
                 _ => Err(JSONParseError::UnexpectedOpenBrace),
             }
         }
         RecursiveStructureType::Close => {
-            // A close brace is only valid if we are inside a brace context.
+            // Only valid when currently inside an object.
             match current_state {
                 JSONState::Brace(bs) => {
-                    // The brace can be closed if the object is empty, or if the
-                    // last thing we saw was a complete value.
+                    use BraceState::*;
                     match bs {
-                        // This case allows for empty objects: `{}`.
-                        BraceState::Empty => Ok(Token::CloseBrace),
-                        // This case allows for closing after a key-value pair.
-                        BraceState::InValue(
+                        // `{}` closes an empty object.
+                        Empty => {
+                            // After closing, the *value* is now complete (so `,`/`}`/`]` can follow).
+                            *current_state = JSONState::Brace(BraceState::InValue(
+                                PrimValue::NonString(NonStringState::Completable(String::new())),
+                            ));
+                            Ok(Token::CloseBrace)
+                        }
+                        // Close after a completed value inside the object.
+                        InValue(
                             PrimValue::String(StringState::Closed)
                             | PrimValue::NonString(NonStringState::Completable(_)),
-                        ) => Ok(Token::CloseBrace),
-                        // This will reject dangling commas (from ExpectingKey) and all other invalid states.
+                        ) => {
+                            *current_state = JSONState::Brace(BraceState::InValue(
+                                PrimValue::NonString(NonStringState::Completable(String::new())),
+                            ));
+                            Ok(Token::CloseBrace)
+                        }
+                        // Dangling comma, expecting key/value, or any other invalid state.
                         _ => Err(JSONParseError::UnexpectedCloseBrace),
                     }
                 }
-                // It's a structural error to close a brace when not in a brace context.
                 _ => Err(JSONParseError::UnexpectedCloseBrace),
             }
         }

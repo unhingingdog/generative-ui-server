@@ -1,4 +1,7 @@
-use crate::JSONState;
+use crate::{
+    parser::state_types::{BraceState, BracketState, NonStringState, PrimValue, StringState},
+    JSONState,
+};
 
 use super::{
     brace::parse_brace,
@@ -13,28 +16,52 @@ use super::{
     JSONParseError, Token,
 };
 
-pub fn parse_char(c: char, current_state: &mut JSONState) -> Result<Token, JSONParseError> {
+pub fn parse_char(c: char, st: &mut JSONState) -> Result<Token, JSONParseError> {
+    // 1) string controls win inside strings
     match c {
-        // Chars that have specific meaning when inside a string.
-        '\\' => handle_escape(current_state),
-        '"' => parse_quote_char(current_state),
+        '\\' => return handle_escape(st),
+        '"' => return parse_quote_char(st),
+        _ => {}
+    }
 
-        // Data-only handling
-        _ if is_string_data(current_state) => parse_string_data(current_state),
-        c if is_non_string_data(c, current_state) => parse_non_string_data(c, current_state),
+    // 2) delimiters must preempt non-string parsing when value is completable
+    let in_completable = matches!(
+        st,
+        JSONState::Brace(BraceState::InValue(
+            PrimValue::String(StringState::Closed)
+                | PrimValue::NonString(NonStringState::Completable(_))
+        )) | JSONState::Bracket(BracketState::InValue(
+            PrimValue::String(StringState::Closed)
+                | PrimValue::NonString(NonStringState::Completable(_))
+        ))
+    );
 
-        // Structural token handling
-        '{' => parse_brace(RecursiveStructureType::Open, current_state),
-        '}' => parse_brace(RecursiveStructureType::Close, current_state),
-        '[' => parse_bracket(RecursiveStructureType::Open, current_state),
-        ']' => parse_bracket(RecursiveStructureType::Close, current_state),
-        ':' => parse_colon(current_state),
-        ',' => parse_comma(current_state),
+    if in_completable {
+        match c {
+            ',' => return parse_comma(st),
+            '}' => return parse_brace(RecursiveStructureType::Close, st),
+            ']' => return parse_bracket(RecursiveStructureType::Close, st),
+            _ => {} // no return here → fall through
+        }
+    }
 
-        // ignored whitespace
+    // 3) data lexers
+    if is_string_data(st) {
+        return parse_string_data(st);
+    }
+    if is_non_string_data(c, st) {
+        return parse_non_string_data(c, st);
+    }
+
+    // 4) remaining structural / whitespace / error
+    match c {
+        '{' => parse_brace(RecursiveStructureType::Open, st),
+        '}' => parse_brace(RecursiveStructureType::Close, st),
+        '[' => parse_bracket(RecursiveStructureType::Open, st),
+        ']' => parse_bracket(RecursiveStructureType::Close, st),
+        ':' => parse_colon(st),
+        ',' => parse_comma(st),
         ' ' | '\t' | '\n' | '\r' => Ok(Token::Whitespace),
-
-        // bad
         _ => Err(JSONParseError::InvalidCharEncountered),
     }
 }
@@ -138,5 +165,72 @@ mod tests {
         assert_eq!(result, Ok(Token::Whitespace));
         // The state should be unchanged after parsing whitespace.
         assert_eq!(state, original_state);
+    }
+
+    #[test]
+    fn delimiters_preempt_nonstring_in_object_completable_comma() {
+        // { "a": 1 , ...
+        let mut st = JSONState::Brace(BraceState::ExpectingValue);
+        assert_eq!(parse_char('1', &mut st), Ok(Token::NonStringData)); // now completable
+        let got = parse_char(',', &mut st);
+        assert_eq!(got, Ok(Token::Comma));
+        assert_eq!(st, JSONState::Brace(BraceState::ExpectingKey));
+    }
+
+    #[test]
+    fn delimiters_preempt_nonstring_in_object_close_brace() {
+        // { "a": 1 }
+        let mut st = JSONState::Brace(BraceState::ExpectingValue);
+        assert_eq!(parse_char('1', &mut st), Ok(Token::NonStringData)); // now completable
+        let got = parse_char('}', &mut st);
+        assert_eq!(got, Ok(Token::CloseBrace));
+        // don’t assert exact state beyond token; upstream stack determines it
+    }
+
+    #[test]
+    fn delimiters_preempt_nonstring_in_array_comma() {
+        // [ 1 , ...
+        let mut st = JSONState::Bracket(BracketState::ExpectingValue);
+        assert_eq!(parse_char('1', &mut st), Ok(Token::NonStringData)); // now completable
+        let got = parse_char(',', &mut st);
+        assert_eq!(got, Ok(Token::Comma));
+        assert_eq!(st, JSONState::Bracket(BracketState::ExpectingValue));
+    }
+
+    #[test]
+    fn delimiters_preempt_nonstring_in_array_close_bracket() {
+        // [ 1 ]
+        let mut st = JSONState::Bracket(BracketState::ExpectingValue);
+        assert_eq!(parse_char('1', &mut st), Ok(Token::NonStringData)); // now completable
+        let got = parse_char(']', &mut st);
+        assert_eq!(got, Ok(Token::CloseBracket));
+    }
+
+    #[test]
+    fn delimiters_preempt_after_string_value_closed_in_object() {
+        // { "a": "x" , ... }  — after closing quote, comma routes before data lexers
+        let mut st = JSONState::Brace(BraceState::ExpectingValue);
+        // open string
+        assert_eq!(parse_char('"', &mut st), Ok(Token::OpenStringData));
+        // some content
+        assert_eq!(parse_char('x', &mut st), Ok(Token::StringContent));
+        // close string
+        assert_eq!(parse_char('"', &mut st), Ok(Token::CloseStringData));
+        // comma should be handled by comma parser, moving to ExpectingKey
+        let got = parse_char(',', &mut st);
+        assert_eq!(got, Ok(Token::Comma));
+        assert_eq!(st, JSONState::Brace(BraceState::ExpectingKey));
+    }
+
+    #[test]
+    fn delimiters_preempt_after_string_value_closed_in_array() {
+        // [ "x" , ... ]
+        let mut st = JSONState::Bracket(BracketState::ExpectingValue);
+        assert_eq!(parse_char('"', &mut st), Ok(Token::OpenStringData));
+        assert_eq!(parse_char('x', &mut st), Ok(Token::StringContent));
+        assert_eq!(parse_char('"', &mut st), Ok(Token::CloseStringData));
+        let got = parse_char(',', &mut st);
+        assert_eq!(got, Ok(Token::Comma));
+        assert_eq!(st, JSONState::Bracket(BracketState::ExpectingValue));
     }
 }

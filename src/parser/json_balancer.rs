@@ -1,9 +1,10 @@
-use crate::lexer;
 use crate::parser::{get_balancing_chars, modify_stack};
+use crate::{lexer, Error};
 
+use super::public_error::Result;
 use super::state_types::JSONState;
 use super::structural_types::ClosingToken;
-use super::structural_types::{BalancingError, TokenProcessingError};
+use super::structural_types::TokenProcessingError;
 
 pub struct JSONBalancer {
     closing_stack: Vec<ClosingToken>,
@@ -26,57 +27,48 @@ impl JSONBalancer {
         println!("-----end---------");
     }
 
-    pub fn process_delta(&mut self, delta: &str) {
+    pub fn process_delta(&mut self, delta: &str) -> Result<String> {
+        self.add_delta(delta)?;
+        self.get_completion()
+    }
+
+    fn add_delta(&mut self, delta: &str) -> Result<()> {
         self.get_debug_state(delta, "start", None);
-        // If the stream is already corrupted, do nothing.
+
         if self.is_corrupted {
-            return;
+            return Err(Error::Corrupted);
         }
 
         for c in delta.chars() {
             self.get_debug_state(delta, "before first char", Some(c));
             match lexer::parse_char(c, &mut self.state) {
-                Ok(token) => {
-                    // This is the existing logic for a successful token parse.
-                    match modify_stack::modify_stack(&mut self.closing_stack, token) {
-                        Err(TokenProcessingError::NotAStructuralToken) => (),
-                        Err(e) => {
-                            self.get_debug_state(delta, "start", Some(c));
-                            self.is_corrupted = true;
-                            println!("ERROR - token processing: {:?}", e);
-                            break;
-                        }
-                        Ok(_) => (),
+                Ok(token) => match modify_stack::modify_stack(&mut self.closing_stack, token) {
+                    Err(TokenProcessingError::NotAStructuralToken) => {}
+                    Err(_) => {
+                        self.is_corrupted = true;
+                        return Err(Error::Corrupted);
                     }
-                }
+                    Ok(_) => {}
+                },
                 Err(e) => {
-                    // This now captures and logs the specific error from parse_char.
-                    println!("ERROR - hard lexical error: {:?}", e);
                     self.is_corrupted = true;
-                    break;
+                    return Err(e.into()); // -> Error::Char(CharError)
                 }
             }
         }
+
+        Ok(())
     }
 
-    /// Returns the string of characters required to validly close the JSON
-    /// structure based on the current state.
-    ///
-    /// This method takes `&self` because it only needs to read the state.
-    /// It returns an error if the JSON is in a state that cannot be cleanly closed.
-    pub fn get_completion(&self) -> Result<String, BalancingError> {
-        // First, check for an unrecoverable corrupted state.
+    fn get_completion(&self) -> Result<String> {
         if self.is_corrupted {
-            return Err(BalancingError::Corrupted);
+            return Err(Error::Corrupted);
         }
-
-        // Then, delegate to the existing logic which handles temporarily un-closable states.
         get_balancing_chars::get_balancing_chars(&self.closing_stack, &self.state)
+            .map_err(Into::into)
     }
 }
 
-/// Implementing Default is idiomatic for structs that have a clear "empty" state.
-/// It allows users to create a new instance with `JSONBalancer::default()`.
 impl Default for JSONBalancer {
     fn default() -> Self {
         JSONBalancer {
@@ -87,47 +79,39 @@ impl Default for JSONBalancer {
     }
 }
 
-// --- Example Usage ---
-// This shows how a consumer of your library (e.g., your WASM module) would use it.
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Assume BalancingError is updated to include a `Corrupted` variant
-    use crate::parser::structural_types::BalancingError;
+    use crate::parser::balancing_test_data::{Outcome, CASES};
+    use std::sync::Mutex;
+
+    // serialize this suite so debug output and states aren't interleaved
+    static LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn test_streaming_usage() {
-        // 1. Initialize the balancer.
-        let mut balancer = JSONBalancer::new();
-        let mut full_json = String::new();
+    fn table_driven_balancing() {
+        let _g = LOCK.lock().unwrap();
 
-        // 2. First delta comes in.
-        let delta1 = "[{\"key\":";
-        full_json.push_str(delta1);
-        balancer.process_delta(delta1);
-        // At this point, the state is ExpectingValue, which is not closable but is not corrupted.
-        assert_eq!(balancer.get_completion(), Err(BalancingError::NotClosable));
+        for case in CASES {
+            let mut bal = JSONBalancer::new();
+            let mut last = Ok(String::new());
 
-        // 3. Second delta comes in.
-        let delta2 = "\"value\"";
-        full_json.push_str(delta2);
-        balancer.process_delta(delta2);
-        let completion2 = balancer.get_completion().unwrap_or_default();
-        // Now the state is valid and closable.
-        assert_eq!(completion2, "}]");
-        println!("After delta 2, display: {}{}", full_json, completion2);
+            for d in case.deltas {
+                last = bal.process_delta(d);
+                eprintln!("case {} | delta {:?} -> {:?}", case.name, d, last);
+            }
 
-        // 4. A corrupted delta comes in.
-        let delta3 = "]"; // Mismatched closer
-        full_json.push_str(delta3);
-        balancer.process_delta(delta3);
-        // The balancer should now be in a permanently corrupted state.
-        assert_eq!(balancer.get_completion(), Err(BalancingError::Corrupted));
-
-        // 5. Any subsequent delta is ignored.
-        let delta4 = "{\"another\": 1}";
-        balancer.process_delta(delta4);
-        assert_eq!(balancer.get_completion(), Err(BalancingError::Corrupted));
-        println!("Final state is corrupted, as expected.");
+            match (&last, &case.outcome) {
+                (Ok(s), Outcome::Completion(want)) => {
+                    assert_eq!(s, want, "case {}", case.name)
+                }
+                (Err(e), Outcome::Err(want)) => {
+                    assert_eq!(e, want, "case {}", case.name)
+                }
+                (got, want) => {
+                    panic!("case {} mismatch: got {got:?}, want {want:?}", case.name)
+                }
+            }
+        }
     }
 }
