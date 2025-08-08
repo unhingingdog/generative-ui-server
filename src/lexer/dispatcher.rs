@@ -1,15 +1,16 @@
-use crate::{
-    handle_escape::handle_escape,
+use crate::JSONState;
+
+use super::{
+    brace::parse_brace,
+    bracket::parse_bracket,
+    colon::parse_colon,
+    comma::parse_comma,
+    escape::handle_escape,
+    lexer_types::RecursiveStructureType,
     non_string_data::{is_non_string_data, parse_non_string_data},
-    parse_brace::parse_brace,
-    parse_bracket::parse_bracket,
-    parse_colon::parse_colon,
-    parse_comma::parse_comma,
-    parse_error_types::JSONParseError,
-    parse_quote_char::parse_quote_char,
-    state_types::{JSONState, Token},
+    quote::parse_quote_char,
     string_data::{is_string_data, parse_string_data},
-    structure_type::RecursiveStructureType,
+    JSONParseError, Token,
 };
 
 pub fn parse_char(c: char, current_state: &mut JSONState) -> Result<Token, JSONParseError> {
@@ -40,8 +41,9 @@ pub fn parse_char(c: char, current_state: &mut JSONState) -> Result<Token, JSONP
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::state_types::{BraceState, PrimValue, StringState};
+
     use super::*;
-    use crate::state_types::{BraceState, JSONState, PrimValue, StringState, Token};
 
     // Helper function to create a state for being inside an open string value.
     fn in_string_value_state() -> JSONState {

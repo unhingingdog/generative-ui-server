@@ -1,6 +1,7 @@
-use crate::parse_error_types::JSONParseError;
-use crate::state_types::*;
-use crate::structure_type::RecursiveStructureType;
+use super::{lexer_types::RecursiveStructureType, JSONParseError, Token};
+use crate::parser::state_types::{
+    BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState,
+};
 
 pub fn parse_bracket(
     brace: RecursiveStructureType,
@@ -54,8 +55,6 @@ pub fn parse_bracket(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse_error_types::JSONParseError; // Make sure this is imported for tests
-    use crate::state_types::{BraceState, BracketState, JSONState, PrimValue, StringState};
 
     // Helper functions to create states for tests
     fn brace_state(state: BraceState) -> JSONState {

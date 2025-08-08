@@ -1,11 +1,13 @@
-use crate::state_types::{ClosingToken, JSONState};
+use crate::JSONState;
+
+use super::structural_types::ClosingToken;
 
 #[derive(Debug, PartialEq)]
 pub enum BalancingError {
     NotClosable,
 }
 
-fn get_balancing_chars(
+pub fn get_balancing_chars(
     closing_stack: &[ClosingToken],
     state: &JSONState,
 ) -> Result<String, BalancingError> {
@@ -24,10 +26,11 @@ fn get_balancing_chars(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::state_types::{
-        BraceState, BracketState, ClosingToken, JSONState, NonStringState, PrimValue, StringState,
+    use crate::parser::state_types::{
+        BraceState, BracketState, NonStringState, PrimValue, StringState,
     };
+
+    use super::*;
 
     // --- Success Cases (Closable States) ---
 

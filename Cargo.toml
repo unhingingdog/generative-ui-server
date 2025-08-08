@@ -1,9 +1,8 @@
 [package]
-name = "generative-ui-server"
+name = "temomere_json"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-phf = { version = "0.11.3", features = ["macros"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+[lib]
+name = "temomere_json"
+path = "src/lib.rs"

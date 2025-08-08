@@ -1,6 +1,6 @@
-use crate::state_types::{
-    ClosingToken, OpeningToken, StructuralToken, Token, TokenProcessingError,
-};
+use crate::lexer::Token;
+
+use super::structural_types::{ClosingToken, OpeningToken, StructuralToken, TokenProcessingError};
 
 pub fn modify_stack(
     stack: &mut Vec<ClosingToken>,
@@ -31,7 +31,6 @@ pub fn modify_stack(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_types::{ClosingToken, Token, TokenProcessingError};
 
     // --- SUCCESS CASES ---
 

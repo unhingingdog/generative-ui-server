@@ -1,5 +1,9 @@
-use crate::parse_error_types::JSONParseError;
-use crate::state_types::*;
+use crate::{
+    parser::state_types::{BraceState, BracketState, PrimValue, StringState},
+    JSONState,
+};
+
+use super::{JSONParseError, Token};
 
 pub fn parse_quote_char(state: &mut JSONState) -> Result<Token, JSONParseError> {
     match state {
@@ -65,8 +69,9 @@ pub fn parse_quote_char(state: &mut JSONState) -> Result<Token, JSONParseError> 
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::state_types::NonStringState;
+
     use super::*;
-    use crate::parse_error_types::JSONParseError;
 
     fn brace_state(state: BraceState) -> JSONState {
         JSONState::Brace(state)

@@ -1,7 +1,9 @@
 use crate::{
-    parse_error_types::JSONParseError,
-    state_types::{BraceState, BracketState, JSONState, PrimValue, StringState, Token},
+    parser::state_types::{BraceState, BracketState, PrimValue, StringState},
+    JSONState,
 };
+
+use super::{JSONParseError, Token};
 
 pub fn handle_escape(current_state: &mut JSONState) -> Result<Token, JSONParseError> {
     match current_state {
@@ -29,7 +31,7 @@ pub fn handle_escape(current_state: &mut JSONState) -> Result<Token, JSONParseEr
 
 #[cfg(test)]
 mod tests {
-    use crate::state_types::NonStringState;
+    use crate::parser::state_types::NonStringState;
 
     use super::*;
 

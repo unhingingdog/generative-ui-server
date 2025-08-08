@@ -1,5 +1,9 @@
-use crate::parse_error_types::JSONParseError;
-use crate::state_types::*;
+use crate::{
+    parser::state_types::{BraceState, BracketState, PrimValue, StringState},
+    JSONState,
+};
+
+use super::{JSONParseError, Token};
 
 pub fn parse_colon(current_state: &mut JSONState) -> Result<Token, JSONParseError> {
     match current_state {
@@ -45,6 +49,8 @@ pub fn parse_colon(current_state: &mut JSONState) -> Result<Token, JSONParseErro
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::state_types::NonStringState;
+
     use super::*;
 
     // Helper functions to create states for tests

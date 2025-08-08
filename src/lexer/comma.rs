@@ -1,7 +1,9 @@
-use crate::parse_error_types::JSONParseError;
-use crate::state_types::{
-    BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState, Token,
+use crate::{
+    parser::state_types::{BraceState, BracketState, NonStringState, PrimValue, StringState},
+    JSONState,
 };
+
+use super::{JSONParseError, Token};
 
 pub fn parse_comma(current_state: &mut JSONState) -> Result<Token, JSONParseError> {
     match current_state {

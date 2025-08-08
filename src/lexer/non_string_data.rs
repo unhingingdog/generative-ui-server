@@ -1,6 +1,9 @@
-use crate::is_valid_non_string_data::{is_non_valid_non_string_data, CompletionCheckValues};
-use crate::parse_error_types::JSONParseError;
-use crate::state_types::*;
+use crate::{
+    parser::state_types::{BraceState, BracketState, NonStringState, PrimValue},
+    JSONState,
+};
+
+use super::{is_valid_non_string_data::is_non_valid_non_string_data, JSONParseError, Token};
 
 fn is_non_string_start(c: char) -> bool {
     c.is_ascii_digit() || c == '-' || matches!(c, 'n' | 't' | 'f')

@@ -1,5 +1,9 @@
-use crate::parse_error_types::JSONParseError;
-use crate::state_types::*;
+use crate::{
+    parser::state_types::{BraceState, BracketState, PrimValue, StringState},
+    JSONState,
+};
+
+use super::{JSONParseError, Token};
 
 pub fn is_string_data(state: &JSONState) -> bool {
     matches!(
@@ -63,6 +67,8 @@ pub fn parse_string_data(state: &mut JSONState) -> Result<Token, JSONParseError>
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::state_types::NonStringState;
+
     use super::*;
 
     // Helper functions to create states for tests

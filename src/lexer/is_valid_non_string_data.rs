@@ -1,4 +1,4 @@
-use crate::parse_error_types::JSONParseError;
+use super::JSONParseError;
 
 const LITERALS: [&str; 3] = ["true", "false", "null"];
 
@@ -66,7 +66,6 @@ pub fn is_non_valid_non_string_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse_error_types::JSONParseError;
 
     fn check(c: char, buffer: &str) -> Result<CompletionCheckValues, JSONParseError> {
         is_non_valid_non_string_data(c, buffer)
