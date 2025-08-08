@@ -1,59 +1,52 @@
 use crate::parse_error_types::JSONParseError;
-use crate::state_types::*;
+use crate::state_types::{
+    BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState, Token,
+};
 
 pub fn parse_comma(current_state: &mut JSONState) -> Result<Token, JSONParseError> {
     match current_state {
-        JSONState::Brace(bs) => match bs {
-            // Case 1: Comma is content inside an open string (key). State does not change.
-            BraceState::InKey(StringState::Open) => Ok(Token::OpenStringData),
+        // --- Case 1: Comma as a structural separator in an object ---
+        // A comma is valid after a completed value, transitioning to expecting the next key.
+        JSONState::Brace(BraceState::InValue(
+            PrimValue::String(StringState::Closed)
+            | PrimValue::NonString(NonStringState::Completable(_)),
+        )) => {
+            *current_state = JSONState::Brace(BraceState::ExpectingKey);
+            Ok(Token::Comma)
+        }
 
-            // Case 2: Comma is content after an escape char in a key. State returns to Open.
-            BraceState::InKey(StringState::Escaped) => {
-                *bs = BraceState::InKey(StringState::Open);
-                Ok(Token::OpenStringData)
-            }
+        // --- Case 2: Comma as a structural separator in an array ---
+        // A comma is valid after a completed value, transitioning to expecting the next value.
+        JSONState::Bracket(BracketState::InValue(
+            PrimValue::String(StringState::Closed)
+            | PrimValue::NonString(NonStringState::Completable(_)),
+        )) => {
+            *current_state = JSONState::Bracket(BracketState::ExpectingValue);
+            Ok(Token::Comma)
+        }
 
-            // Case 3: Comma is content inside an open string (value). State does not change.
-            BraceState::InValue(PrimValue::String(StringState::Open)) => Ok(Token::OpenStringData),
+        // --- Case 3: Comma as content inside an open string (key or value) ---
+        // The comma is just a character within the string; the state does not change.
+        JSONState::Brace(BraceState::InKey(StringState::Open))
+        | JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Open)))
+        | JSONState::Bracket(BracketState::InValue(PrimValue::String(StringState::Open))) => {
+            Ok(Token::OpenStringData)
+        }
 
-            // Case 4: Comma is content after an escape char in a value. State returns to Open.
-            BraceState::InValue(PrimValue::String(StringState::Escaped)) => {
-                *bs = BraceState::InValue(PrimValue::String(StringState::Open));
-                Ok(Token::OpenStringData)
-            }
+        // --- Case 4: Comma as content after an escape character ---
+        // The comma is a literal character, and the string state returns to Open.
+        JSONState::Brace(BraceState::InKey(string_state @ StringState::Escaped))
+        | JSONState::Brace(BraceState::InValue(PrimValue::String(
+            string_state @ StringState::Escaped,
+        )))
+        | JSONState::Bracket(BracketState::InValue(PrimValue::String(
+            string_state @ StringState::Escaped,
+        ))) => {
+            *string_state = StringState::Open;
+            Ok(Token::OpenStringData)
+        }
 
-            // Case 5: Comma is a separator after a completed value. State transitions to ExpectingKey.
-            BraceState::InValue(PrimValue::String(StringState::Closed))
-            | BraceState::InValue(PrimValue::NonString) => {
-                *bs = BraceState::ExpectingKey;
-                Ok(Token::Comma)
-            }
-
-            // Case 6: All other states are invalid for a comma.
-            _ => Err(JSONParseError::UnexpectedComma),
-        },
-        JSONState::Bracket(bs) => match bs {
-            // Case 1: Comma is content inside an open string. State does not change.
-            BracketState::InValue(PrimValue::String(StringState::Open)) => {
-                Ok(Token::OpenStringData)
-            }
-
-            // Case 2: Comma is content after an escape char. State returns to Open.
-            BracketState::InValue(PrimValue::String(StringState::Escaped)) => {
-                *bs = BracketState::InValue(PrimValue::String(StringState::Open));
-                Ok(Token::OpenStringData)
-            }
-
-            // Case 3: Comma is a separator after a completed value. State transitions to ExpectingValue.
-            BracketState::InValue(PrimValue::String(StringState::Closed))
-            | BracketState::InValue(PrimValue::NonString) => {
-                *bs = BracketState::ExpectingValue;
-                Ok(Token::Comma)
-            }
-
-            // Case 4: All other states are invalid for a comma.
-            _ => Err(JSONParseError::UnexpectedComma),
-        },
+        // --- Case 5: All other states are invalid for a comma ---
         _ => Err(JSONParseError::UnexpectedComma),
     }
 }
@@ -83,7 +76,9 @@ mod tests {
 
     #[test]
     fn test_separator_in_brace_after_non_string_value() {
-        let mut state = brace_state(BraceState::InValue(PrimValue::NonString));
+        let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
+            NonStringState::Completable("".to_string()),
+        )));
         let result = parse_comma(&mut state);
         assert_eq!(result, Ok(Token::Comma));
         assert_eq!(state, brace_state(BraceState::ExpectingKey));
@@ -101,7 +96,9 @@ mod tests {
 
     #[test]
     fn test_separator_in_bracket_after_non_string_value() {
-        let mut state = bracket_state(BracketState::InValue(PrimValue::NonString));
+        let mut state = bracket_state(BracketState::InValue(PrimValue::NonString(
+            NonStringState::Completable("".to_string()),
+        )));
         let result = parse_comma(&mut state);
         assert_eq!(result, Ok(Token::Comma));
         assert_eq!(state, bracket_state(BracketState::ExpectingValue));

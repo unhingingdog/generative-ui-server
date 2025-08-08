@@ -1,5 +1,7 @@
-use crate::JSONParseError;
-use crate::{BraceState, BracketState, JSONState, PrimValue, StringState, Token};
+use crate::{
+    parse_error_types::JSONParseError,
+    state_types::{BraceState, BracketState, JSONState, PrimValue, StringState, Token},
+};
 
 pub fn handle_escape(current_state: &mut JSONState) -> Result<Token, JSONParseError> {
     match current_state {
@@ -27,6 +29,8 @@ pub fn handle_escape(current_state: &mut JSONState) -> Result<Token, JSONParseEr
 
 #[cfg(test)]
 mod tests {
+    use crate::state_types::NonStringState;
+
     use super::*;
 
     fn brace_state(state: BraceState) -> JSONState {
@@ -90,7 +94,9 @@ mod tests {
 
     #[test]
     fn test_escape_in_brace_non_string_value() {
-        let mut state = brace_state(BraceState::InValue(PrimValue::NonString));
+        let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
+            NonStringState::Completable("".to_string()),
+        )));
         let result = handle_escape(&mut state);
 
         assert_eq!(result, Err(JSONParseError::UnexpectedEscape));
@@ -106,7 +112,9 @@ mod tests {
 
     #[test]
     fn test_escape_in_bracket_non_string_value() {
-        let mut state = bracket_state(BracketState::InValue(PrimValue::NonString));
+        let mut state = bracket_state(BracketState::InValue(PrimValue::NonString(
+            NonStringState::Completable("".to_string()),
+        )));
         let result = handle_escape(&mut state);
 
         assert_eq!(result, Err(JSONParseError::UnexpectedEscape));

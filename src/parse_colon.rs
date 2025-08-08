@@ -18,12 +18,9 @@ pub fn parse_colon(current_state: &mut JSONState) -> Result<Token, JSONParseErro
             }
 
             // Case 3: Colon is content after an escape char.
-            BraceState::InKey(StringState::Escaped) => {
+            BraceState::InKey(StringState::Escaped)
+            | BraceState::InValue(PrimValue::String(StringState::Escaped)) => {
                 *bs = BraceState::InKey(StringState::Open);
-                Ok(Token::OpenStringData)
-            }
-            BraceState::InValue(PrimValue::String(StringState::Escaped)) => {
-                *bs = BraceState::InValue(PrimValue::String(StringState::Open));
                 Ok(Token::OpenStringData)
             }
 
@@ -123,7 +120,9 @@ mod tests {
 
     #[test]
     fn test_error_colon_after_non_string_value() {
-        let mut state = brace_state(BraceState::InValue(PrimValue::NonString));
+        let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
+            NonStringState::Completable("".to_string()),
+        )));
         let result = parse_colon(&mut state);
         assert_eq!(result, Err(JSONParseError::UnexpectedColon));
     }
@@ -132,7 +131,9 @@ mod tests {
     fn test_error_colon_in_any_bracket_state() {
         let states = vec![
             bracket_state(BracketState::ExpectingValue),
-            bracket_state(BracketState::InValue(PrimValue::NonString)),
+            bracket_state(BracketState::InValue(PrimValue::NonString(
+                NonStringState::Completable("".to_string()),
+            ))),
             bracket_state(BracketState::InValue(PrimValue::String(
                 StringState::Closed,
             ))),

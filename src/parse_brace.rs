@@ -8,20 +8,22 @@ pub fn parse_brace(
 ) -> Result<Token, JSONParseError> {
     match brace {
         RecursiveStructureType::Open => {
+            // An open brace is valid only when a value is expected, or at the start.
             match current_state {
                 // This is the start of the JSON document.
                 JSONState::Pending => {
                     *current_state = JSONState::Brace(BraceState::Empty);
                     Ok(Token::OpenBrace)
                 }
-                // This is the start of a nested object.
-                // TODO: this is wrong. needs to handle ExpectingKey state.
+                // This is the start of a nested object, which is a valid value.
                 JSONState::Brace(BraceState::ExpectingValue)
                 | JSONState::Bracket(BracketState::ExpectingValue) => {
                     *current_state = JSONState::Brace(BraceState::Empty);
                     Ok(Token::OpenBrace)
                 }
-                // It's an error to open a brace in any other context.
+                // It's an error to open a brace in any other context. This correctly
+                // handles states like `ExpectingKey` or `Empty`, because an object
+                // cannot be a key in JSON.
                 _ => Err(JSONParseError::UnexpectedOpenBrace),
             }
         }
@@ -35,9 +37,11 @@ pub fn parse_brace(
                         // This case allows for empty objects: `{}`.
                         BraceState::Empty => Ok(Token::CloseBrace),
                         // This case allows for closing after a key-value pair.
-                        BraceState::InValue(PrimValue::String(StringState::Closed))
-                        | BraceState::InValue(PrimValue::NonString) => Ok(Token::CloseBrace),
-                        // this will reject dangling commas
+                        BraceState::InValue(
+                            PrimValue::String(StringState::Closed)
+                            | PrimValue::NonString(NonStringState::Completable(_)),
+                        ) => Ok(Token::CloseBrace),
+                        // This will reject dangling commas (from ExpectingKey) and all other invalid states.
                         _ => Err(JSONParseError::UnexpectedCloseBrace),
                     }
                 }
@@ -121,9 +125,20 @@ mod tests {
 
     #[test]
     fn test_close_brace_after_non_string_value() {
-        let mut state = brace_state(BraceState::InValue(PrimValue::NonString));
+        let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
+            NonStringState::Completable("".to_string()),
+        )));
         let result = parse_brace(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBrace));
+    }
+
+    #[test]
+    fn test_error_close_brace_when_in_non_completable_non_string_data() {
+        let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
+            NonStringState::NonCompletable("".to_string()),
+        )));
+        let result = parse_brace(RecursiveStructureType::Close, &mut state);
+        assert_eq!(result, Err(JSONParseError::UnexpectedCloseBrace));
     }
 
     #[test]

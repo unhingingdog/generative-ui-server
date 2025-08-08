@@ -6,9 +6,15 @@ pub enum StringState {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum NonStringState {
+    Completable(String),
+    NonCompletable(String),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum PrimValue {
     String(StringState),
-    NonString,
+    NonString(NonStringState),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -22,6 +28,7 @@ pub enum BraceState {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum BracketState {
+    Empty,
     InValue(PrimValue),
     ExpectingValue,
 }
@@ -31,6 +38,33 @@ pub enum JSONState {
     Brace(BraceState),
     Bracket(BracketState),
     Pending,
+}
+
+impl JSONState {
+    pub fn is_cleanly_closable(&self) -> bool {
+        match self {
+            // These are the only states where the JSON is "at rest" and can be closed.
+            JSONState::Pending // An empty document is fine.
+            | JSONState::Brace(BraceState::Empty)
+            | JSONState::Bracket(BracketState::Empty) => true,
+
+            // An object is closable if its last element is a fully formed, completable value.
+            JSONState::Brace(BraceState::InValue(
+                PrimValue::String(StringState::Closed)
+                | PrimValue::NonString(NonStringState::Completable(_)),
+            )) => true,
+
+            // An array is closable if its last element is a fully formed, completable value.
+            JSONState::Bracket(BracketState::InValue(
+                PrimValue::String(StringState::Closed)
+                | PrimValue::NonString(NonStringState::Completable(_)),
+            )) => true,
+
+            // All other states (like `ExpectingKey`, `InKey`, `ExpectingValue`, etc.)
+            // are not cleanly closable.
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -47,4 +81,113 @@ pub enum Token {
     Comma,         // ','
     Colon,         // ':'
     Whitespace,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TokenProcessingError {
+    NotAStructuralToken,
+    NotClosable,
+    NotAnOpeningOrClosingToken,
+    NotAnOpeningToken,
+    NotAClosingToken,
+    CorruptedStackMismatchedTokens,
+    CorruptedStackEmptyOnClose,
+}
+
+pub enum StructuralToken {
+    OpenBrace,
+    CloseBrace,
+    OpenBracket,
+    CloseBracket,
+    OpenKey,
+    CloseKey,
+    OpenStringData,
+    CloseStringData,
+}
+
+impl TryFrom<&Token> for StructuralToken {
+    type Error = TokenProcessingError;
+
+    fn try_from(token: &Token) -> Result<Self, Self::Error> {
+        match token {
+            Token::OpenBrace => Ok(StructuralToken::OpenBrace),
+            Token::CloseBrace => Ok(StructuralToken::CloseBrace),
+            Token::OpenBracket => Ok(StructuralToken::OpenBracket),
+            Token::CloseBracket => Ok(StructuralToken::CloseBracket),
+            Token::OpenKey => Ok(StructuralToken::OpenKey),
+            Token::CloseKey => Ok(StructuralToken::CloseKey),
+            Token::OpenStringData => Ok(StructuralToken::OpenStringData),
+            Token::CloseStringData => Ok(StructuralToken::CloseStringData),
+
+            Token::NonStringData | Token::Comma | Token::Colon | Token::Whitespace => {
+                Err(TokenProcessingError::NotAStructuralToken)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum OpeningToken {
+    OpenBrace,
+    OpenBracket,
+    OpenKey,
+    OpenStringData,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ClosingToken {
+    CloseBrace,
+    CloseBracket,
+    CloseKey,
+    CloseStringData,
+}
+
+impl OpeningToken {
+    pub fn get_closing_token(&self) -> ClosingToken {
+        match self {
+            Self::OpenBrace => ClosingToken::CloseBrace,
+            Self::OpenBracket => ClosingToken::CloseBracket,
+            Self::OpenKey => ClosingToken::CloseKey,
+            Self::OpenStringData => ClosingToken::CloseStringData,
+        }
+    }
+}
+
+impl ClosingToken {
+    pub fn get_char(&self) -> char {
+        match self {
+            Self::CloseBrace => '}',
+            Self::CloseBracket => ']',
+            Self::CloseKey => '"',
+            Self::CloseStringData => '"',
+        }
+    }
+}
+
+impl TryFrom<&StructuralToken> for OpeningToken {
+    type Error = TokenProcessingError;
+
+    fn try_from(token: &StructuralToken) -> Result<Self, Self::Error> {
+        match token {
+            StructuralToken::OpenBrace => Ok(OpeningToken::OpenBrace),
+            StructuralToken::OpenBracket => Ok(OpeningToken::OpenBracket),
+            StructuralToken::OpenKey => Ok(OpeningToken::OpenKey),
+            StructuralToken::OpenStringData => Ok(OpeningToken::OpenStringData),
+            _ => Err(TokenProcessingError::NotAnOpeningToken),
+        }
+    }
+}
+
+impl TryFrom<&StructuralToken> for ClosingToken {
+    type Error = TokenProcessingError;
+
+    fn try_from(token: &StructuralToken) -> Result<Self, Self::Error> {
+        match token {
+            StructuralToken::CloseBrace => Ok(ClosingToken::CloseBrace),
+            StructuralToken::CloseBracket => Ok(ClosingToken::CloseBracket),
+            StructuralToken::CloseKey => Ok(ClosingToken::CloseKey),
+            StructuralToken::CloseStringData => Ok(ClosingToken::CloseStringData),
+            _ => Err(TokenProcessingError::NotAClosingToken),
+        }
+    }
 }

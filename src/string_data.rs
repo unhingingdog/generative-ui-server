@@ -55,6 +55,9 @@ pub fn parse_string_data(state: &mut JSONState) -> Result<Token, JSONParseError>
                 "Unexpected character in array context",
             )),
         },
+        _ => Err(JSONParseError::TokenParseErrorMisc(
+            "Unexpected character at start of structure",
+        )),
     }
 }
 
@@ -173,7 +176,9 @@ mod tests {
 
     #[test]
     fn test_error_in_non_string_value() {
-        let mut state = brace_state(BraceState::InValue(PrimValue::NonString));
+        let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
+            NonStringState::Completable(String::from("")),
+        )));
         let result = parse_string_data(&mut state);
         assert!(result.is_err());
     }
