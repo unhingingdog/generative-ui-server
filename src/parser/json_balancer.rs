@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::lexer::{JSONParseError, Token};
 use crate::parser::{get_balancing_chars, modify_stack};
 use crate::{lexer, Error};
 
@@ -18,46 +18,43 @@ impl JSONBalancer {
         Self::default()
     }
 
-    pub fn get_debug_state(&self, delta: &str, tag: &str, c: Option<char>) {
-        println!("-----{}---------", tag);
-        println!("delta: {}", delta);
-        println!("char: {}", c.unwrap_or('N'));
-        println!("state {:?}", self.state);
-        println!("stack {:?}", self.closing_stack);
-        println!("is corrupted? {:?}", self.is_corrupted);
-        println!("-----end---------");
-    }
-
     pub fn process_delta(&mut self, delta: &str) -> Result<String> {
         self.add_delta(delta)?;
         self.get_completion()
     }
 
     fn add_delta(&mut self, delta: &str) -> Result<()> {
-        self.get_debug_state(delta, "start", None);
-
         if self.is_corrupted {
             return Err(Error::Corrupted);
         }
 
         for c in delta.chars() {
-            self.get_debug_state(delta, "before first char", Some(c));
+            // --- AFTER (SURGICAL FIX) ---
             match lexer::parse_char(c, &mut self.state) {
                 Ok(token) => match modify_stack::modify_stack(&mut self.closing_stack, &token) {
-                    Err(TokenProcessingError::NotAStructuralToken) => {}
+                    Ok(_) => self.handle_pop_state_transition(token),
+                    Err(
+                        TokenProcessingError::NotAStructuralToken
+                        | TokenProcessingError::NotAnOpeningOrClosingToken,
+                    ) => {}
                     Err(_) => {
                         self.is_corrupted = true;
                         return Err(Error::Corrupted);
                     }
-                    Ok(_) => self.handle_pop_state_transition(token),
                 },
-                Err(_) => {
-                    self.is_corrupted = true;
-                    return Err(Error::Corrupted);
+                Err(e) => {
+                    if matches!(e, JSONParseError::NotClosableInsideUnicode) {
+                        // This is a hack around the fact we have no NonStringData InUnicode substate (for now).
+                        // This is a "soft" error. We return NotClosable and do NOT corrupt the stream.
+                        return Err(Error::NotClosable);
+                    } else {
+                        // This is a "hard" lexer error. We corrupt the stream and return the specific error.
+                        self.is_corrupted = true;
+                        return Err(e.into());
+                    }
                 }
             }
         }
-
         Ok(())
     }
 
@@ -105,16 +102,9 @@ impl Default for JSONBalancer {
 mod tests {
     use super::*;
     use crate::parser::balancing_test_data::{Outcome, CASES};
-    use std::sync::Mutex;
-
-    // A lock to serialize tests, ensuring debug output is not interleaved (comment out when not
-    // debugging).
-    static LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn table_driven_balancing() {
-        let _g = LOCK.lock().unwrap();
-
         for case in CASES {
             let mut bal = JSONBalancer::new();
             let mut last = Ok(String::new());
@@ -123,9 +113,6 @@ mod tests {
                 last = bal.process_delta(d);
             }
 
-            // This is the updated assertion logic. It provides a much clearer
-            // message on failure, including the case name, deltas, expected
-            // outcome, and the actual outcome.
             let (success, expected_str, actual_str) = match (&last, &case.outcome) {
                 (Ok(s), Outcome::Completion(want)) => (
                     s.as_str() == *want,

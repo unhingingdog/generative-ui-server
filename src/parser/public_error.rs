@@ -39,11 +39,19 @@ impl From<lexer::JSONParseError> for CharError {
         CharError(e)
     }
 }
+
 impl From<lexer::JSONParseError> for Error {
     fn from(e: lexer::JSONParseError) -> Self {
-        Error::Char(CharError(e))
+        // Special case to smooth over the fact we have no unicode specific state. Maybe fix later
+        // to make cleaner, and remove all this ugly crap.
+        if matches!(e, lexer::JSONParseError::NotClosableInsideUnicode) {
+            return Error::NotClosable;
+        }
+        // Treat all other hard lexer errors as a fatal corruption.
+        Error::Corrupted
     }
 }
+
 impl From<BalancingError> for Error {
     fn from(e: BalancingError) -> Self {
         match e {

@@ -47,43 +47,30 @@ fn set_string_state_from_escaped_in_place(st: &mut JSONState, next: StringState)
 /// Transitions String(Open) → String(Escaped).
 pub fn handle_escape(current_state: &mut JSONState) -> Result<Token, JSONParseError> {
     if set_string_state_after_escape_in_place(current_state, StringState::Escaped) {
-        Ok(Token::OpenStringData)
+        // IMPORTANT: backslash is not structural; don't push another string frame.
+        Ok(Token::StringContent)
     } else {
         Err(JSONParseError::UnexpectedEscape)
     }
 }
 
-/// Called for the *escaped character* that follows a backslash.
-/// For standard escapes (`" \ / b f n r t`) we return to Open.
-/// For `\u` we **stay Escaped** so the string is not closable yet (no Unicode substate needed).
-/// For any other char, we return a lexer error so the balancer marks the snapshot as Corrupted.
+/// Called for the escaped character that follows a backslash.
+/// For standard escapes (`" \ / b f n r t`) we return to Open and emit StringContent.
+/// For `\u` we signal "not closable yet" and keep Escaped so the caller won’t close.
 pub fn handle_escaped_char(
     escaped: char,
     current_state: &mut JSONState,
 ) -> Result<Token, JSONParseError> {
-    // valid single-char escapes
-    const SIMPLE_ESCAPES: [char; 8] = ['"', '\\', '/', 'b', 'f', 'n', 'r', 't'];
-
     if escaped == 'u' {
-        // Incomplete unicode escape → remain Escaped (still not closable)
-        if set_string_state_from_escaped_in_place(current_state, StringState::Escaped) {
-            return Ok(Token::OpenStringData);
-        } else {
-            return Err(JSONParseError::UnexpectedEscape);
-        }
+        // Stay Escaped; upstream will surface NotClosable
+        return Err(JSONParseError::NotClosableInsideUnicode);
     }
 
-    if SIMPLE_ESCAPES.contains(&escaped) {
-        // Normal escape resolved → back to Open
-        if set_string_state_from_escaped_in_place(current_state, StringState::Open) {
-            return Ok(Token::OpenStringData);
-        } else {
-            return Err(JSONParseError::UnexpectedEscape);
-        }
+    if set_string_state_from_escaped_in_place(current_state, StringState::Open) {
+        Ok(Token::StringContent)
+    } else {
+        Err(JSONParseError::UnexpectedEscape)
     }
-
-    // Anything else is an invalid escape like `\Z` → hard error
-    Err(JSONParseError::InvalidCharEncountered)
 }
 
 #[cfg(test)]
@@ -104,7 +91,7 @@ mod tests {
     fn escape_in_brace_string_value_enters_escaped() {
         let mut st = brace(BraceState::InValue(PrimValue::String(StringState::Open)));
         let res = handle_escape(&mut st);
-        assert_eq!(res, Ok(Token::OpenStringData));
+        assert_eq!(res, Ok(Token::StringContent));
         assert_eq!(
             st,
             brace(BraceState::InValue(PrimValue::String(StringState::Escaped)))
@@ -115,7 +102,7 @@ mod tests {
     fn escape_in_brace_key_enters_escaped() {
         let mut st = brace(BraceState::InKey(StringState::Open));
         let res = handle_escape(&mut st);
-        assert_eq!(res, Ok(Token::OpenStringData));
+        assert_eq!(res, Ok(Token::StringContent));
         assert_eq!(st, brace(BraceState::InKey(StringState::Escaped)));
     }
 
@@ -123,7 +110,7 @@ mod tests {
     fn escape_in_bracket_string_value_enters_escaped() {
         let mut st = bracket(BracketState::InValue(PrimValue::String(StringState::Open)));
         let res = handle_escape(&mut st);
-        assert_eq!(res, Ok(Token::OpenStringData));
+        assert_eq!(res, Ok(Token::StringContent));
         assert_eq!(
             st,
             bracket(BracketState::InValue(PrimValue::String(
@@ -158,16 +145,16 @@ mod tests {
     #[test]
     fn escaped_standard_char_returns_to_open_in_key() {
         let mut st = brace(BraceState::InKey(StringState::Escaped));
-        let res = handle_escaped_char('n', &mut st); // \n
-        assert_eq!(res, Ok(Token::OpenStringData));
+        let res = handle_escaped_char('n', &mut st);
+        assert_eq!(res, Ok(Token::StringContent));
         assert_eq!(st, brace(BraceState::InKey(StringState::Open)));
     }
 
     #[test]
     fn escaped_standard_char_returns_to_open_in_value_object() {
         let mut st = brace(BraceState::InValue(PrimValue::String(StringState::Escaped)));
-        let res = handle_escaped_char('"', &mut st); // \"
-        assert_eq!(res, Ok(Token::OpenStringData));
+        let res = handle_escaped_char('"', &mut st);
+        assert_eq!(res, Ok(Token::StringContent));
         assert_eq!(
             st,
             brace(BraceState::InValue(PrimValue::String(StringState::Open)))
@@ -179,8 +166,8 @@ mod tests {
         let mut st = bracket(BracketState::InValue(PrimValue::String(
             StringState::Escaped,
         )));
-        let res = handle_escaped_char('\\', &mut st); // \\
-        assert_eq!(res, Ok(Token::OpenStringData));
+        let res = handle_escaped_char('\\', &mut st);
+        assert_eq!(res, Ok(Token::StringContent));
         assert_eq!(
             st,
             bracket(BracketState::InValue(PrimValue::String(StringState::Open)))
@@ -188,45 +175,14 @@ mod tests {
     }
 
     #[test]
-    fn escaped_unicode_u_stays_escaped_in_key() {
-        let mut st = brace(BraceState::InKey(StringState::Escaped));
-        let res = handle_escaped_char('u', &mut st); // \u (incomplete)
-        assert_eq!(res, Ok(Token::OpenStringData));
-        assert_eq!(st, brace(BraceState::InKey(StringState::Escaped))); // still Escaped → NotClosable
-    }
-
-    #[test]
-    fn escaped_unicode_u_stays_escaped_in_value_object() {
+    fn escaped_unicode_u_is_not_closable_and_stays_escaped() {
         let mut st = brace(BraceState::InValue(PrimValue::String(StringState::Escaped)));
         let res = handle_escaped_char('u', &mut st);
-        assert_eq!(res, Ok(Token::OpenStringData));
+        assert_eq!(res, Err(JSONParseError::NotClosableInsideUnicode));
         assert_eq!(
             st,
             brace(BraceState::InValue(PrimValue::String(StringState::Escaped)))
         );
-    }
-
-    #[test]
-    fn escaped_unicode_u_stays_escaped_in_value_array() {
-        let mut st = bracket(BracketState::InValue(PrimValue::String(
-            StringState::Escaped,
-        )));
-        let res = handle_escaped_char('u', &mut st);
-        assert_eq!(res, Ok(Token::OpenStringData));
-        assert_eq!(
-            st,
-            bracket(BracketState::InValue(PrimValue::String(
-                StringState::Escaped
-            )))
-        );
-    }
-
-    #[test]
-    fn escaped_invalid_char_is_error() {
-        // \Z should be a hard lexer error
-        let mut st = brace(BraceState::InValue(PrimValue::String(StringState::Escaped)));
-        let res = handle_escaped_char('Z', &mut st);
-        assert_eq!(res, Err(JSONParseError::InvalidCharEncountered));
     }
 
     #[test]

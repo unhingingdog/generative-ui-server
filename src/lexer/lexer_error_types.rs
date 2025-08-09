@@ -7,6 +7,7 @@ pub enum JSONParseError {
     UnexpectedCharInNonStringData,
     UnexpectedEscape,
     UnexpectedComma,
+    UnexpectedCharWhenExpectingValue,
     UnexpectedColon,
     UnexpectedOpenBracket,
     UnexpectedCloseBracket,
