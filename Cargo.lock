@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "temomere_json"
+name = "telomere_json"
 version = "0.1.0"

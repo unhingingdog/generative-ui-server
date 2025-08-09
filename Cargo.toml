@@ -1,8 +1,8 @@
 [package]
-name = "temomere_json"
+name = "telomere_json"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "temomere_json"
+name = "telomere_json"
 path = "src/lib.rs"
