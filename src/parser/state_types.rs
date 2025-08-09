@@ -1,3 +1,5 @@
+use crate::lexer::is_non_valid_non_string_data;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum StringState {
     Open,
@@ -42,27 +44,94 @@ pub enum JSONState {
 
 impl JSONState {
     pub fn is_cleanly_closable(&self) -> bool {
-        match self {
-            // These are the only states where the JSON is "at rest" and can be closed.
-            JSONState::Pending // An empty document is fine.
-            | JSONState::Brace(BraceState::Empty)
-            | JSONState::Bracket(BracketState::Empty) => true,
+        use super::state_types::{
+            BraceState, BracketState, NonStringState, PrimValue, StringState,
+        };
 
-            // An object is closable if its last element is a fully formed, completable value.
-            JSONState::Brace(BraceState::InValue(
-                PrimValue::String(StringState::Closed)
-                | PrimValue::NonString(NonStringState::Completable(_)),
-            )) => true,
+        matches!(
+            self,
+            JSONState::Pending
+                | JSONState::Brace(BraceState::Empty)
+                | JSONState::Bracket(BracketState::Empty)
+                | JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Closed)))
+                | JSONState::Bracket(BracketState::InValue(PrimValue::String(
+                    StringState::Closed
+                )))
+                | JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Open)))
+                | JSONState::Bracket(BracketState::InValue(PrimValue::String(StringState::Open)))
+                | JSONState::Brace(BraceState::InValue(PrimValue::NonString(
+                    NonStringState::Completable(_)
+                )))
+                | JSONState::Bracket(BracketState::InValue(PrimValue::NonString(
+                    NonStringState::Completable(_)
+                )))
+        )
+    }
+}
 
-            // An array is closable if its last element is a fully formed, completable value.
-            JSONState::Bracket(BracketState::InValue(
-                PrimValue::String(StringState::Closed)
-                | PrimValue::NonString(NonStringState::Completable(_)),
-            )) => true,
+#[cfg(test)]
+mod is_cleanly_closable_tests {
+    use super::*;
 
-            // All other states (like `ExpectingKey`, `InKey`, `ExpectingValue`, etc.)
-            // are not cleanly closable.
-            _ => false,
-        }
+    #[test]
+    fn pending_and_empty_containers_are_closable() {
+        assert!(JSONState::Pending.is_cleanly_closable());
+        assert!(JSONState::Brace(BraceState::Empty).is_cleanly_closable());
+        assert!(JSONState::Bracket(BracketState::Empty).is_cleanly_closable());
+    }
+
+    #[test]
+    fn closed_values_are_closable() {
+        assert!(
+            JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Closed)))
+                .is_cleanly_closable()
+        );
+        assert!(JSONState::Bracket(BracketState::InValue(PrimValue::String(
+            StringState::Closed
+        )))
+        .is_cleanly_closable());
+        assert!(JSONState::Brace(BraceState::InValue(PrimValue::NonString(
+            NonStringState::Completable("1".into())
+        )))
+        .is_cleanly_closable());
+        assert!(
+            JSONState::Bracket(BracketState::InValue(PrimValue::NonString(
+                NonStringState::Completable("1".into())
+            )))
+            .is_cleanly_closable()
+        );
+    }
+
+    #[test]
+    fn open_string_values_are_closable_by_closing_quote() {
+        assert!(
+            JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Open)))
+                .is_cleanly_closable()
+        );
+        assert!(
+            JSONState::Bracket(BracketState::InValue(PrimValue::String(StringState::Open)))
+                .is_cleanly_closable()
+        );
+    }
+
+    #[test]
+    fn non_completable_nonstring_is_not_closable() {
+        assert!(!JSONState::Brace(BraceState::InValue(PrimValue::NonString(
+            NonStringState::NonCompletable("1e".into())
+        )))
+        .is_cleanly_closable());
+        assert!(
+            !JSONState::Bracket(BracketState::InValue(PrimValue::NonString(
+                NonStringState::NonCompletable("1e".into())
+            )))
+            .is_cleanly_closable()
+        );
+    }
+
+    #[test]
+    fn expecting_key_or_value_is_not_closable() {
+        assert!(!JSONState::Brace(BraceState::ExpectingKey).is_cleanly_closable());
+        assert!(!JSONState::Brace(BraceState::ExpectingValue).is_cleanly_closable());
+        assert!(!JSONState::Bracket(BracketState::ExpectingValue).is_cleanly_closable());
     }
 }

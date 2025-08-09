@@ -15,6 +15,8 @@ pub struct Case {
     pub outcome: Outcome,
 }
 
+/* ----------------------------- Happy paths ----------------------------- */
+
 pub const EMPTY_ARRAY: Case = Case {
     name: "empty_array",
     deltas: &["["],
@@ -30,6 +32,12 @@ pub const EMPTY_OBJECT: Case = Case {
 pub const ARRAY_ONE_NUMBER: Case = Case {
     name: "array_one_number",
     deltas: &["[", "1"],
+    outcome: Outcome::Completion("]"),
+};
+
+pub const ARRAY_ONE_CLOSABLE_LITERAL: Case = Case {
+    name: "array_one_number",
+    deltas: &["[", "true"],
     outcome: Outcome::Completion("]"),
 };
 
@@ -71,7 +79,40 @@ pub const ARRAY_OF_OBJECTS_PARTIAL_SECOND: Case = Case {
     outcome: Outcome::Completion("}]"),
 };
 
-// ----- Not closable yet (valid so far, but need more chars) -----
+pub const OBJ_VALUE_ARRAY_PARTIAL: Case = Case {
+    name: "obj_value_array_partial",
+    deltas: &["{", r#""a""#, ":", "[", "1"],
+    outcome: Outcome::Completion("]}"),
+};
+
+pub const NESTED_ARRAYS_NEED_TWO_BRACKETS: Case = Case {
+    name: "nested_arrays_need_two_brackets",
+    deltas: &["[", "[", "1"],
+    outcome: Outcome::Completion("]]"),
+};
+
+/* ---------------- Partial-but-closable (auto-complete) ----------------- */
+
+pub const ARRAY_ONE_STRING_OPEN: Case = Case {
+    name: "array_one_string_open",
+    deltas: &["[", r#""hel"#],
+    outcome: Outcome::Completion("\"]"),
+};
+
+pub const ARRAY_IN_OPEN_STRING: Case = Case {
+    name: "array_in_open_string",
+    deltas: &["[", r#""hel"#],
+    outcome: Outcome::Completion("\"]"),
+};
+
+pub const OBJ_IN_OPEN_STRING_VALUE: Case = Case {
+    name: "obj_in_open_string_value",
+    deltas: &["{", r#""a""#, ":", r#""va"#],
+    outcome: Outcome::Completion("\"}"),
+};
+
+/* -------------------------- Not closable yet --------------------------- */
+
 pub const OBJ_EXPECTING_COLON: Case = Case {
     name: "obj_expecting_colon",
     deltas: &["{", r#""a""#],
@@ -84,15 +125,15 @@ pub const OBJ_EXPECTING_VALUE: Case = Case {
     outcome: Outcome::Err(Error::NotClosable),
 };
 
-pub const OBJ_IN_OPEN_STRING_VALUE: Case = Case {
-    name: "obj_in_open_string_value",
-    deltas: &["{", r#""a""#, ":", r#""va"#],
-    outcome: Outcome::Completion("\"}"),
+pub const OBJ_IN_OPEN_STRING_KEY: Case = Case {
+    name: "obj_in_open_string_key",
+    deltas: &["{", r#""ke"#],
+    outcome: Outcome::Err(Error::NotClosable),
 };
 
 pub const OBJ_IN_ESCAPE: Case = Case {
     name: "obj_in_escape",
-    deltas: &["{", r#""a""#, ":", r#""va\"#], // backslash before the closing quote
+    deltas: &["{", r#""a""#, ":", r#""va\"#],
     outcome: Outcome::Err(Error::NotClosable),
 };
 
@@ -100,12 +141,6 @@ pub const ARRAY_AFTER_COMMA_EXPECTING_VALUE: Case = Case {
     name: "array_after_comma_expecting_value",
     deltas: &["[", "1", ",", ""],
     outcome: Outcome::Err(Error::NotClosable),
-};
-
-pub const ARRAY_IN_OPEN_STRING: Case = Case {
-    name: "array_in_open_string",
-    deltas: &["[", r#""hel"#],
-    outcome: Outcome::Completion("\"]"),
 };
 
 pub const NUMBER_PARTIAL_MINUS: Case = Case {
@@ -117,6 +152,12 @@ pub const NUMBER_PARTIAL_MINUS: Case = Case {
 pub const NUMBER_PARTIAL_EXP: Case = Case {
     name: "number_partial_exp",
     deltas: &["{", r#""n""#, ":", "1e"],
+    outcome: Outcome::Err(Error::NotClosable),
+};
+
+pub const NUMBER_PARTIAL_DECIMAL: Case = Case {
+    name: "number_partial_decimal",
+    deltas: &["{", r#""n""#, ":", "1."],
     outcome: Outcome::Err(Error::NotClosable),
 };
 
@@ -132,7 +173,14 @@ pub const LITERAL_NULL_PARTIAL: Case = Case {
     outcome: Outcome::Err(Error::NotClosable),
 };
 
-// ----- Corrupted states (irrecoverable) -----
+pub const UNICODE_ESCAPE_PARTIAL: Case = Case {
+    name: "unicode_escape_partial",
+    deltas: &["{", r#""a""#, ":", r#"""#, "\\", "u"],
+    outcome: Outcome::Err(Error::NotClosable),
+};
+
+/* --------------------------- Corrupted/invalid ------------------------- */
+
 pub const CORRUPTED_MISMATCH: Case = Case {
     name: "corrupted_mismatch",
     deltas: &["[", "]", "]"],
@@ -177,8 +225,8 @@ pub const CORRUPTED_QUOTE_IN_NONSTRING_DATA: Case = Case {
 
 pub const CORRUPTED_CLOSE_BEFORE_KEY: Case = Case {
     name: "corrupted_close_before_key",
-    deltas: &["{", "}"], // immediately closing is fine actually; make it bad by adding comma then brace
-    outcome: Outcome::Completion(""), // keep as valid; see next for corrupted variant
+    deltas: &["{", "}"],
+    outcome: Outcome::Completion(""),
 };
 
 pub const CORRUPTED_COMMA_THEN_BRACE: Case = Case {
@@ -187,7 +235,38 @@ pub const CORRUPTED_COMMA_THEN_BRACE: Case = Case {
     outcome: Outcome::Err(Error::Corrupted),
 };
 
-// ----- Already complete snapshots -----
+pub const ARRAY_TRAILING_COMMA_THEN_CLOSE: Case = Case {
+    name: "array_trailing_comma_then_close",
+    deltas: &["[", "1", ",", "]"],
+    outcome: Outcome::Err(Error::Corrupted),
+};
+
+pub const TOPLEVEL_CLOSE_BRACE: Case = Case {
+    name: "toplevel_close_brace",
+    deltas: &["}"],
+    outcome: Outcome::Err(Error::Corrupted),
+};
+
+pub const TOPLEVEL_CLOSE_BRACKET: Case = Case {
+    name: "toplevel_close_bracket",
+    deltas: &["]"],
+    outcome: Outcome::Err(Error::Corrupted),
+};
+
+pub const OBJECT_CLOSE_BRACKET_MISMATCH: Case = Case {
+    name: "object_close_bracket_mismatch",
+    deltas: &["{", "]"],
+    outcome: Outcome::Err(Error::Corrupted),
+};
+
+pub const UNICODE_ESCAPE_INVALID_HEX: Case = Case {
+    name: "unicode_escape_invalid_hex",
+    deltas: &["{", r#""a""#, ":", r#"""#, "\\", "u", "Z"],
+    outcome: Outcome::Err(Error::Corrupted),
+};
+
+/* ------------------------- Already complete --------------------------- */
+
 pub const ALREADY_COMPLETE_EMPTY_ARRAY: Case = Case {
     name: "already_complete_empty_array",
     deltas: &["[]"],
@@ -200,30 +279,39 @@ pub const ALREADY_COMPLETE_SIMPLE_OBJECT: Case = Case {
     outcome: Outcome::Completion(""),
 };
 
-// Collect all
+/* ------------------------------ Registry ------------------------------ */
+
 pub const CASES: &[&Case] = &[
     // happy paths
     &EMPTY_ARRAY,
     &EMPTY_OBJECT,
     &ARRAY_ONE_NUMBER,
+    &ARRAY_ONE_CLOSABLE_LITERAL,
     &OBJECT_SIMPLE_KV,
     &NESTED_OBJECT_IN_ARRAY,
     &DOUBLE_NEST,
     &MULTI_KV_OBJECT_NEEDS_BRACE,
     &TRAILING_STRING_VALUE,
     &ARRAY_OF_OBJECTS_PARTIAL_SECOND,
+    &OBJ_VALUE_ARRAY_PARTIAL,
+    &NESTED_ARRAYS_NEED_TWO_BRACKETS,
+    // partial-but-closable
+    &ARRAY_ONE_STRING_OPEN,
+    &ARRAY_IN_OPEN_STRING,
+    &OBJ_IN_OPEN_STRING_VALUE,
     // not closable yet
     &OBJ_EXPECTING_COLON,
     &OBJ_EXPECTING_VALUE,
-    &OBJ_IN_OPEN_STRING_VALUE,
+    &OBJ_IN_OPEN_STRING_KEY,
     &OBJ_IN_ESCAPE,
     &ARRAY_AFTER_COMMA_EXPECTING_VALUE,
-    &ARRAY_IN_OPEN_STRING,
     &NUMBER_PARTIAL_MINUS,
     &NUMBER_PARTIAL_EXP,
+    &NUMBER_PARTIAL_DECIMAL,
     &LITERAL_TRUE_PARTIAL,
     &LITERAL_NULL_PARTIAL,
-    // corrupted
+    &UNICODE_ESCAPE_PARTIAL,
+    // corrupted/invalid
     &CORRUPTED_MISMATCH,
     &CORRUPTED_EXTRA_COLON,
     &CORRUPTED_CLOSE_BRACE_IN_ARRAY,
@@ -233,6 +321,11 @@ pub const CASES: &[&Case] = &[
     &CORRUPTED_QUOTE_IN_NONSTRING_DATA,
     &CORRUPTED_CLOSE_BEFORE_KEY,
     &CORRUPTED_COMMA_THEN_BRACE,
+    &ARRAY_TRAILING_COMMA_THEN_CLOSE,
+    &TOPLEVEL_CLOSE_BRACE,
+    &TOPLEVEL_CLOSE_BRACKET,
+    &OBJECT_CLOSE_BRACKET_MISMATCH,
+    &UNICODE_ESCAPE_INVALID_HEX,
     // already complete
     &ALREADY_COMPLETE_EMPTY_ARRAY,
     &ALREADY_COMPLETE_SIMPLE_OBJECT,

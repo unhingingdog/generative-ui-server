@@ -16,5 +16,6 @@ pub enum JSONParseError {
     InvalidCharInNumber,
     InvalidCharInLiteral,
     InvalidNonStringDataFirstChar,
+    NotClosableInsideUnicode,
     TokenParseErrorMisc(&'static str),
 }

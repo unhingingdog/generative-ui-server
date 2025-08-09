@@ -3,7 +3,10 @@ use crate::{
     JSONState,
 };
 
-use super::{is_valid_non_string_data::is_non_valid_non_string_data, JSONParseError, Token};
+use super::{
+    is_valid_non_string_data::{is_non_valid_non_string_data, CompletionCheckValues},
+    JSONParseError, Token,
+};
 
 fn is_non_string_start(c: char) -> bool {
     c.is_ascii_digit() || c == '-' || matches!(c, 'n' | 't' | 'f')
@@ -27,40 +30,40 @@ pub fn parse_non_string_data(c: char, state: &mut JSONState) -> Result<Token, JS
     match state {
         // --- Case 1: Starting a new non-string value ---
         JSONState::Brace(bs @ BraceState::ExpectingValue) => {
-            *bs = BraceState::InValue(PrimValue::NonString(NonStringState::Completable(
-                c.to_string(),
-            )));
+            let s = c.to_string();
+            *bs = BraceState::InValue(PrimValue::NonString(if c == '-' {
+                NonStringState::NonCompletable(s)
+            } else {
+                NonStringState::Completable(s)
+            }));
             Ok(Token::NonStringData)
         }
         JSONState::Bracket(bs @ (BracketState::Empty | BracketState::ExpectingValue)) => {
-            *bs = BracketState::InValue(PrimValue::NonString(NonStringState::Completable(
-                c.to_string(),
-            )));
+            let s = c.to_string();
+            *bs = BracketState::InValue(PrimValue::NonString(if c == '-' {
+                NonStringState::NonCompletable(s)
+            } else {
+                NonStringState::Completable(s)
+            }));
             Ok(Token::NonStringData)
         }
 
         // --- Case 2: Continuing an existing non-string value ---
         JSONState::Brace(BraceState::InValue(PrimValue::NonString(ns_state)))
         | JSONState::Bracket(BracketState::InValue(PrimValue::NonString(ns_state))) => {
-            // Get the current buffer from either state variant.
+            // Borrow the current buffer
             let buffer = match ns_state {
                 NonStringState::Completable(s) | NonStringState::NonCompletable(s) => s,
             };
 
-            // Use the validation sub-util to check the new character.
-            match is_non_valid_non_string_data(c, buffer) {
-                Ok(_) => {
-                    // Covers both Complete and Incomplete
-                    buffer.push(c);
-                    *ns_state = NonStringState::Completable(buffer.clone());
-                    Ok(Token::NonStringData)
-                }
-                Err(e) => {
-                    buffer.push(c);
-                    *ns_state = NonStringState::NonCompletable(buffer.clone());
-                    Err(e)
-                }
-            }
+            let status = is_non_valid_non_string_data(c, buffer);
+            buffer.push(c);
+            *ns_state = match status {
+                Ok(CompletionCheckValues::Complete) => NonStringState::Completable(buffer.clone()),
+                // Incomplete or Err => not closable yet
+                _ => NonStringState::NonCompletable(buffer.clone()),
+            };
+            status.map(|_| Token::NonStringData)
         }
 
         _ => Err(JSONParseError::UnexpectedCharInNonStringData),
@@ -108,6 +111,32 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_start_minus_in_brace_sets_noncompletable() {
+        let mut state = brace_state(BraceState::ExpectingValue);
+        let result = parse_non_string_data('-', &mut state);
+        assert_eq!(result, Ok(Token::NonStringData));
+        assert_eq!(
+            state,
+            brace_state(BraceState::InValue(PrimValue::NonString(
+                NonStringState::NonCompletable("-".to_string())
+            )))
+        );
+    }
+
+    #[test]
+    fn test_start_minus_in_bracket_sets_noncompletable() {
+        let mut state = bracket_state(BracketState::Empty);
+        let result = parse_non_string_data('-', &mut state);
+        assert_eq!(result, Ok(Token::NonStringData));
+        assert_eq!(
+            state,
+            bracket_state(BracketState::InValue(PrimValue::NonString(
+                NonStringState::NonCompletable("-".to_string())
+            )))
+        );
+    }
+
     // --- Continue Parsing Tests ---
 
     #[test]
@@ -120,7 +149,16 @@ mod tests {
         assert_eq!(
             state,
             brace_state(BraceState::InValue(PrimValue::NonString(
-                NonStringState::Completable("tr".to_string())
+                NonStringState::NonCompletable("tr".to_string())
+            )))
+        );
+        // 'tr' is still incomplete literal; next 'u' then 'e' will flip
+        let _ = parse_non_string_data('u', &mut state);
+        let _ = parse_non_string_data('e', &mut state);
+        assert_eq!(
+            state,
+            brace_state(BraceState::InValue(PrimValue::NonString(
+                NonStringState::Completable("true".to_string())
             )))
         );
     }
@@ -136,6 +174,47 @@ mod tests {
             state,
             bracket_state(BracketState::InValue(PrimValue::NonString(
                 NonStringState::Completable("123".to_string())
+            )))
+        );
+    }
+
+    #[test]
+    fn test_number_exponent_incomplete_not_closable_brace() {
+        let mut state = brace_state(BraceState::ExpectingValue);
+        let _ = parse_non_string_data('1', &mut state);
+        let _ = parse_non_string_data('e', &mut state);
+        assert_eq!(
+            state,
+            brace_state(BraceState::InValue(PrimValue::NonString(
+                NonStringState::NonCompletable("1e".to_string())
+            )))
+        );
+    }
+
+    #[test]
+    fn test_number_exponent_sign_still_incomplete() {
+        let mut state = brace_state(BraceState::ExpectingValue);
+        let _ = parse_non_string_data('1', &mut state);
+        let _ = parse_non_string_data('e', &mut state);
+        let _ = parse_non_string_data('+', &mut state);
+        assert_eq!(
+            state,
+            brace_state(BraceState::InValue(PrimValue::NonString(
+                NonStringState::NonCompletable("1e+".to_string())
+            )))
+        );
+    }
+
+    #[test]
+    fn test_number_exponent_becomes_completable_after_digit() {
+        let mut state = brace_state(BraceState::ExpectingValue);
+        let _ = parse_non_string_data('1', &mut state);
+        let _ = parse_non_string_data('e', &mut state);
+        let _ = parse_non_string_data('3', &mut state);
+        assert_eq!(
+            state,
+            brace_state(BraceState::InValue(PrimValue::NonString(
+                NonStringState::Completable("1e3".to_string())
             )))
         );
     }

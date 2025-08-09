@@ -1,12 +1,13 @@
 use crate::lexer::Token;
-
-use super::structural_types::{ClosingToken, OpeningToken, StructuralToken, TokenProcessingError};
+use crate::parser::structural_types::{
+    ClosingToken, OpeningToken, StructuralToken, TokenProcessingError,
+};
 
 pub fn modify_stack(
     stack: &mut Vec<ClosingToken>,
-    token: Token,
+    token: &Token,
 ) -> Result<(), TokenProcessingError> {
-    if let Ok(structural_token) = StructuralToken::try_from(&token) {
+    if let Ok(structural_token) = StructuralToken::try_from(token) {
         if let Ok(opening_token) = OpeningToken::try_from(&structural_token) {
             stack.push(opening_token.get_closing_token());
             return Ok(());
@@ -31,13 +32,15 @@ pub fn modify_stack(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::Token;
+    use crate::parser::structural_types::{ClosingToken, TokenProcessingError};
 
     // --- SUCCESS CASES ---
 
     #[test]
     fn test_push_open_brace_on_empty_stack() {
         let mut stack = vec![];
-        let result = modify_stack(&mut stack, Token::OpenBrace);
+        let result = modify_stack(&mut stack, &Token::OpenBrace);
         assert_eq!(result, Ok(()));
         assert_eq!(stack, vec![ClosingToken::CloseBrace]);
     }
@@ -45,7 +48,7 @@ mod tests {
     #[test]
     fn test_push_open_key_on_non_empty_stack() {
         let mut stack = vec![ClosingToken::CloseBracket];
-        let result = modify_stack(&mut stack, Token::OpenKey);
+        let result = modify_stack(&mut stack, &Token::OpenKey);
         assert_eq!(result, Ok(()));
         assert_eq!(
             stack,
@@ -56,7 +59,7 @@ mod tests {
     #[test]
     fn test_valid_pop_matching_token() {
         let mut stack = vec![ClosingToken::CloseBrace];
-        let result = modify_stack(&mut stack, Token::CloseBrace);
+        let result = modify_stack(&mut stack, &Token::CloseBrace);
         assert_eq!(result, Ok(()));
         assert!(stack.is_empty());
     }
@@ -65,17 +68,17 @@ mod tests {
     fn test_valid_sequence_push_and_pop() {
         let mut stack = vec![];
         // Simulates processing: `[{`
-        modify_stack(&mut stack, Token::OpenBracket).unwrap();
-        modify_stack(&mut stack, Token::OpenBrace).unwrap();
+        modify_stack(&mut stack, &Token::OpenBracket).unwrap();
+        modify_stack(&mut stack, &Token::OpenBrace).unwrap();
         assert_eq!(
             stack,
             vec![ClosingToken::CloseBracket, ClosingToken::CloseBrace]
         );
 
         // Simulates processing: `}]`
-        modify_stack(&mut stack, Token::CloseBrace).unwrap();
+        modify_stack(&mut stack, &Token::CloseBrace).unwrap();
         assert_eq!(stack, vec![ClosingToken::CloseBracket]);
-        modify_stack(&mut stack, Token::CloseBracket).unwrap();
+        modify_stack(&mut stack, &Token::CloseBracket).unwrap();
         assert!(stack.is_empty());
     }
 
@@ -84,7 +87,7 @@ mod tests {
     #[test]
     fn test_err_non_structural_token_comma() {
         let mut stack = vec![];
-        let result = modify_stack(&mut stack, Token::Comma);
+        let result = modify_stack(&mut stack, &Token::Comma);
         assert_eq!(result, Err(TokenProcessingError::NotAStructuralToken));
         assert!(stack.is_empty()); // Stack should be unchanged
     }
@@ -92,7 +95,7 @@ mod tests {
     #[test]
     fn test_err_non_structural_token_whitespace() {
         let mut stack = vec![];
-        let result = modify_stack(&mut stack, Token::Whitespace);
+        let result = modify_stack(&mut stack, &Token::Whitespace);
         assert_eq!(result, Err(TokenProcessingError::NotAStructuralToken));
         assert!(stack.is_empty());
     }
@@ -101,7 +104,7 @@ mod tests {
     fn test_err_mismatched_closing_token() {
         // Simulates finding a ']' where a '}' was expected.
         let mut stack = vec![ClosingToken::CloseBrace];
-        let result = modify_stack(&mut stack, Token::CloseBracket);
+        let result = modify_stack(&mut stack, &Token::CloseBracket);
         assert_eq!(
             result,
             Err(TokenProcessingError::CorruptedStackMismatchedTokens)
@@ -113,7 +116,7 @@ mod tests {
     #[test]
     fn test_err_closing_token_on_empty_stack() {
         let mut stack = vec![];
-        let result = modify_stack(&mut stack, Token::CloseBracket);
+        let result = modify_stack(&mut stack, &Token::CloseBracket);
         assert_eq!(
             result,
             Err(TokenProcessingError::CorruptedStackEmptyOnClose)
@@ -129,7 +132,7 @@ mod tests {
         // If `StructuralToken` could contain a variant like `Separator`, this is what would happen:
         // let mut stack = vec![];
         // let token = Token::Separator; // Assume this converts to StructuralToken::Separator
-        // let result = modify_stack(&mut stack, token);
+        // let result = modify_stack(&mut stack, &token);
         // assert_eq!(result, Err(TokenProcessingError::NotAnOpeningOrClosingToken));
     }
 }

@@ -14,6 +14,7 @@ pub enum TokenProcessingError {
     NotAClosingToken,
     CorruptedStackMismatchedTokens,
     CorruptedStackEmptyOnClose,
+    NotAPopLevelStateClosingToken,
 }
 
 pub enum StructuralToken {
@@ -112,6 +113,24 @@ impl TryFrom<&StructuralToken> for ClosingToken {
             StructuralToken::CloseKey => Ok(ClosingToken::CloseKey),
             StructuralToken::CloseStringData => Ok(ClosingToken::CloseStringData),
             _ => Err(TokenProcessingError::NotAClosingToken),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PopLevelToken {
+    CloseBrace,
+    CloseBracket,
+}
+
+impl TryFrom<&Token> for PopLevelToken {
+    type Error = TokenProcessingError;
+
+    fn try_from(token: &Token) -> Result<Self, Self::Error> {
+        match token {
+            Token::CloseBrace => Ok(PopLevelToken::CloseBrace),
+            Token::CloseBracket => Ok(PopLevelToken::CloseBracket),
+            _ => Err(TokenProcessingError::NotAPopLevelStateClosingToken),
         }
     }
 }

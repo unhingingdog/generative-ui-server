@@ -1,4 +1,5 @@
 use crate::{
+    lexer::escape::handle_escaped_char,
     parser::state_types::{BraceState, BracketState, NonStringState, PrimValue, StringState},
     JSONState,
 };
@@ -24,7 +25,20 @@ pub fn parse_char(c: char, st: &mut JSONState) -> Result<Token, JSONParseError> 
         _ => {}
     }
 
-    // 2) delimiters must preempt non-string parsing when value is completable
+    // 2) if we’re currently in Escaped state, resolve it before anything else.
+    use crate::parser::state_types::*;
+    if matches!(
+        st,
+        JSONState::Brace(BraceState::InKey(StringState::Escaped))
+            | JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Escaped)))
+            | JSONState::Bracket(BracketState::InValue(PrimValue::String(
+                StringState::Escaped
+            )))
+    ) {
+        return handle_escaped_char(c, st);
+    }
+
+    // 3) delimiters must preempt non-string parsing when value is completable
     let in_completable = matches!(
         st,
         JSONState::Brace(BraceState::InValue(
@@ -45,7 +59,7 @@ pub fn parse_char(c: char, st: &mut JSONState) -> Result<Token, JSONParseError> 
         }
     }
 
-    // 3) data lexers
+    // 4) data lexers
     if is_string_data(st) {
         return parse_string_data(st);
     }
@@ -53,7 +67,7 @@ pub fn parse_char(c: char, st: &mut JSONState) -> Result<Token, JSONParseError> 
         return parse_non_string_data(c, st);
     }
 
-    // 4) remaining structural / whitespace / error
+    // 5) remaining structural / whitespace / error
     match c {
         '{' => parse_brace(RecursiveStructureType::Open, st),
         '}' => parse_brace(RecursiveStructureType::Close, st),
@@ -232,5 +246,37 @@ mod tests {
         let got = parse_char(',', &mut st);
         assert_eq!(got, Ok(Token::Comma));
         assert_eq!(st, JSONState::Bracket(BracketState::ExpectingValue));
+    }
+
+    #[test]
+    fn escaped_state_consumes_regular_escape_char() {
+        // start in Escaped state after seeing a backslash
+        let mut st = JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Escaped)));
+
+        // feeding 'n' is resolved by handle_escaped_char and returns OpenStringData
+        let got = parse_char('n', &mut st);
+        assert_eq!(got, Ok(Token::OpenStringData));
+
+        // state should now be back to Open (normal string parsing)
+        assert_eq!(
+            st,
+            JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Open)))
+        );
+    }
+
+    #[test]
+    fn escaped_state_with_unicode_u_stays_escaped_and_is_not_closable() {
+        // start in Escaped state
+        let mut st = JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Escaped)));
+
+        // feeding 'u' stays Escaped and returns OpenStringData; not closable yet
+        let got = parse_char('u', &mut st);
+        assert_eq!(got, Ok(Token::OpenStringData));
+
+        // state remains Escaped so caller knows we’re mid-unicode sequence
+        assert_eq!(
+            st,
+            JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Escaped)))
+        );
     }
 }

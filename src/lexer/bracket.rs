@@ -1,4 +1,6 @@
-use super::{lexer_types::RecursiveStructureType, JSONParseError, Token};
+use crate::lexer::{
+    lexer_error_types::JSONParseError, lexer_types::RecursiveStructureType, lexer_types::Token,
+};
 use crate::parser::state_types::{
     BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState,
 };
@@ -18,7 +20,7 @@ pub fn parse_bracket(
                 }
                 // This is the start of a nested array, which is a valid value.
                 JSONState::Brace(BraceState::ExpectingValue)
-                | JSONState::Bracket(BracketState::ExpectingValue) => {
+                | JSONState::Bracket(BracketState::Empty | BracketState::ExpectingValue) => {
                     *current_state = JSONState::Bracket(BracketState::Empty);
                     Ok(Token::OpenBracket)
                 }
@@ -55,6 +57,12 @@ pub fn parse_bracket(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::{
+        lexer_error_types::JSONParseError, lexer_types::RecursiveStructureType, lexer_types::Token,
+    };
+    use crate::parser::state_types::{
+        BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState,
+    };
 
     // Helper functions to create states for tests
     fn brace_state(state: BraceState) -> JSONState {
@@ -98,13 +106,23 @@ mod tests {
         assert_eq!(result, Err(JSONParseError::UnexpectedOpenBracket));
     }
 
+    #[test]
+    fn test_open_bracket_in_empty_array_allowed() {
+        let mut state = JSONState::Bracket(BracketState::Empty);
+        let res = parse_bracket(RecursiveStructureType::Open, &mut state);
+        assert_eq!(res, Ok(Token::OpenBracket));
+        assert_eq!(state, JSONState::Bracket(BracketState::Empty));
+    }
+
     // --- CLOSE BRACKET TESTS ---
 
     #[test]
-    fn test_close_bracket_in_empty_array() {
+    fn test_close_bracket_in_empty_array_does_not_change_state() {
         let mut state = bracket_state(BracketState::Empty);
+        let original_state = state.clone();
         let result = parse_bracket(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBracket));
+        assert_eq!(state, original_state); // State should not be modified
     }
 
     #[test]
@@ -116,21 +134,25 @@ mod tests {
     }
 
     #[test]
-    fn test_close_bracket_after_string_value() {
+    fn test_close_bracket_after_string_value_does_not_change_state() {
         let mut state = bracket_state(BracketState::InValue(PrimValue::String(
             StringState::Closed,
         )));
+        let original_state = state.clone();
         let result = parse_bracket(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBracket));
+        assert_eq!(state, original_state); // State should not be modified
     }
 
     #[test]
-    fn test_close_bracket_after_non_string_value() {
+    fn test_close_bracket_after_non_string_value_does_not_change_state() {
         let mut state = bracket_state(BracketState::InValue(PrimValue::NonString(
             NonStringState::Completable("".to_string()),
         )));
+        let original_state = state.clone();
         let result = parse_bracket(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBracket));
+        assert_eq!(state, original_state); // State should not be modified
     }
 
     #[test]

@@ -1,4 +1,6 @@
-use super::{lexer_types::RecursiveStructureType, JSONParseError, Token};
+use crate::lexer::{
+    lexer_error_types::JSONParseError, lexer_types::RecursiveStructureType, lexer_types::Token,
+};
 use crate::parser::state_types::{
     BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState,
 };
@@ -30,23 +32,12 @@ pub fn parse_brace(
                     use BraceState::*;
                     match bs {
                         // `{}` closes an empty object.
-                        Empty => {
-                            // After closing, the *value* is now complete (so `,`/`}`/`]` can follow).
-                            *current_state = JSONState::Brace(BraceState::InValue(
-                                PrimValue::NonString(NonStringState::Completable(String::new())),
-                            ));
-                            Ok(Token::CloseBrace)
-                        }
+                        Empty => Ok(Token::CloseBrace),
                         // Close after a completed value inside the object.
                         InValue(
                             PrimValue::String(StringState::Closed)
                             | PrimValue::NonString(NonStringState::Completable(_)),
-                        ) => {
-                            *current_state = JSONState::Brace(BraceState::InValue(
-                                PrimValue::NonString(NonStringState::Completable(String::new())),
-                            ));
-                            Ok(Token::CloseBrace)
-                        }
+                        ) => Ok(Token::CloseBrace),
                         // Dangling comma, expecting key/value, or any other invalid state.
                         _ => Err(JSONParseError::UnexpectedCloseBrace),
                     }
@@ -102,7 +93,6 @@ mod tests {
 
     #[test]
     fn test_open_brace_in_empty_bracket() {
-        // This test specifically covers the bug fix.
         let mut state = bracket_state(BracketState::Empty);
         let result = parse_brace(RecursiveStructureType::Open, &mut state);
         assert_eq!(result, Ok(Token::OpenBrace));
@@ -119,10 +109,12 @@ mod tests {
     // --- CLOSE BRACE TESTS ---
 
     #[test]
-    fn test_close_brace_in_empty_object() {
+    fn test_close_brace_in_empty_object_does_not_change_state() {
         let mut state = brace_state(BraceState::Empty);
+        let original_state = state.clone();
         let result = parse_brace(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBrace));
+        assert_eq!(state, original_state);
     }
 
     #[test]
@@ -133,19 +125,23 @@ mod tests {
     }
 
     #[test]
-    fn test_close_brace_after_string_value() {
+    fn test_close_brace_after_string_value_does_not_change_state() {
         let mut state = brace_state(BraceState::InValue(PrimValue::String(StringState::Closed)));
+        let original_state = state.clone();
         let result = parse_brace(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBrace));
+        assert_eq!(state, original_state);
     }
 
     #[test]
-    fn test_close_brace_after_non_string_value() {
+    fn test_close_brace_after_non_string_value_does_not_change_state() {
         let mut state = brace_state(BraceState::InValue(PrimValue::NonString(
             NonStringState::Completable("".to_string()),
         )));
+        let original_state = state.clone();
         let result = parse_brace(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Ok(Token::CloseBrace));
+        assert_eq!(state, original_state);
     }
 
     #[test]

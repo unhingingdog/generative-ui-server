@@ -119,13 +119,10 @@ mod tests {
     }
 
     #[test]
-    fn test_not_closable_when_in_open_string_value() {
-        let stack = vec![];
+    fn test_closable_when_in_open_string_value() {
+        let stack = vec![ClosingToken::CloseStringData];
         let state = JSONState::Bracket(BracketState::InValue(PrimValue::String(StringState::Open)));
-        assert_eq!(
-            get_balancing_chars(&stack, &state),
-            Err(BalancingError::NotClosable)
-        );
+        assert_eq!(get_balancing_chars(&stack, &state), Ok("\"".to_string()));
     }
 
     #[test]
