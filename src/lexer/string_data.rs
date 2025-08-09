@@ -1,8 +1,6 @@
 use crate::lexer::lexer_error_types::JSONParseError;
 use crate::lexer::lexer_types::Token;
-use crate::parser::state_types::{
-    BraceState, BracketState, JSONState, NonStringState, PrimValue, StringState,
-};
+use crate::parser::state_types::{BraceState, BracketState, JSONState, PrimValue, StringState};
 
 /// A guard function that checks if the parser is in a state where it is
 /// actively consuming characters inside an open string.

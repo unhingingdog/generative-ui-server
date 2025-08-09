@@ -1,5 +1,3 @@
-use crate::lexer::is_non_valid_non_string_data;
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum StringState {
     Open,
