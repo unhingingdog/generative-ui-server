@@ -2,6 +2,24 @@
 name = "telomere_json"
 version = "0.1.0"
 edition = "2021"
+authors = ["Hamish Gilkison <hamishgilkison@gmail.com>"]
+
+description = "A lightweight, library to cap incomplete JSON."
+
+# A valid SPDX license identifier. MIT and Apache-2.0 are common choices.
+license = "MIT" 
+
+# Link to your project's repository.
+repository = "https://github.com/unhingingdog/generative-ui-server"
+
+# The README file to display on the crate page.
+readme = "README.md"
+
+# Keywords to help users discover your crate.
+keywords = ["json","complete", "llm"]
+
+# Categories for browsing on crates.io.
+categories = ["parser-implementations", "web-programming"]
 
 [lib]
 name = "telomere_json"
