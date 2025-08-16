@@ -11,7 +11,8 @@ pub fn parse_comma(current_state: &mut JSONState) -> Result<Token, JSONParseErro
         // A comma is valid after a completed value, transitioning to expecting the next key.
         JSONState::Brace(BraceState::InValue(
             PrimValue::String(StringState::Closed)
-            | PrimValue::NonString(NonStringState::Completable(_)),
+            | PrimValue::NonString(NonStringState::Completable(_))
+            | PrimValue::NestedValueCompleted,
         )) => {
             *current_state = JSONState::Brace(BraceState::ExpectingKey);
             Ok(Token::Comma)
@@ -21,7 +22,8 @@ pub fn parse_comma(current_state: &mut JSONState) -> Result<Token, JSONParseErro
         // A comma is valid after a completed value, transitioning to expecting the next value.
         JSONState::Bracket(BracketState::InValue(
             PrimValue::String(StringState::Closed)
-            | PrimValue::NonString(NonStringState::Completable(_)),
+            | PrimValue::NonString(NonStringState::Completable(_))
+            | PrimValue::NestedValueCompleted,
         )) => {
             *current_state = JSONState::Bracket(BracketState::ExpectingValue);
             Ok(Token::Comma)
@@ -104,6 +106,22 @@ mod tests {
         let result = parse_comma(&mut state);
         assert_eq!(result, Ok(Token::Comma));
         assert_eq!(state, bracket_state(BracketState::ExpectingValue));
+    }
+
+    #[test]
+    fn test_comma_after_nested_value_completed_in_brace() {
+        let mut state = JSONState::Brace(BraceState::InValue(PrimValue::NestedValueCompleted));
+        let result = parse_comma(&mut state);
+        assert_eq!(result, Ok(Token::Comma));
+        assert_eq!(state, JSONState::Brace(BraceState::ExpectingKey));
+    }
+
+    #[test]
+    fn test_comma_after_nested_value_completed_in_bracket() {
+        let mut state = JSONState::Bracket(BracketState::InValue(PrimValue::NestedValueCompleted));
+        let result = parse_comma(&mut state);
+        assert_eq!(result, Ok(Token::Comma));
+        assert_eq!(state, JSONState::Bracket(BracketState::ExpectingValue));
     }
 
     // --- VALID CONTENT CASES (COMMA INSIDE A STRING) ---

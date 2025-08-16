@@ -11,10 +11,13 @@ pub enum NonStringState {
     NonCompletable(String),
 }
 
+// TODO: PrimValue is now an inappropriate name given the addition of a NestedValueCompleted case.
+// Update naming to something better.
 #[derive(Debug, PartialEq, Clone)]
 pub enum PrimValue {
     String(StringState),
     NonString(NonStringState),
+    NestedValueCompleted,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -63,6 +66,8 @@ impl JSONState {
                 | JSONState::Bracket(BracketState::InValue(PrimValue::NonString(
                     NonStringState::Completable(_)
                 )))
+                | JSONState::Brace(BraceState::InValue(PrimValue::NestedValueCompleted))
+                | JSONState::Bracket(BracketState::InValue(PrimValue::NestedValueCompleted))
         )
     }
 }
@@ -108,6 +113,18 @@ mod is_cleanly_closable_tests {
         );
         assert!(
             JSONState::Bracket(BracketState::InValue(PrimValue::String(StringState::Open)))
+                .is_cleanly_closable()
+        );
+    }
+
+    #[test]
+    fn completed_values_are_closable() {
+        assert!(
+            JSONState::Brace(BraceState::InValue(PrimValue::NestedValueCompleted))
+                .is_cleanly_closable()
+        );
+        assert!(
+            JSONState::Bracket(BracketState::InValue(PrimValue::NestedValueCompleted))
                 .is_cleanly_closable()
         );
     }

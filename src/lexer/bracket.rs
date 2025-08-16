@@ -42,7 +42,8 @@ pub fn parse_bracket(
                         // This case allows for closing after a value.
                         BracketState::InValue(
                             PrimValue::String(StringState::Closed)
-                            | PrimValue::NonString(NonStringState::Completable(_)),
+                            | PrimValue::NonString(NonStringState::Completable(_))
+                            | PrimValue::NestedValueCompleted,
                         ) => Ok(Token::CloseBracket),
                         _ => Err(JSONParseError::UnexpectedCloseBracket),
                     }
@@ -162,6 +163,13 @@ mod tests {
         )));
         let result = parse_bracket(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Err(JSONParseError::UnexpectedCloseBracket));
+    }
+
+    #[test]
+    fn test_close_bracket_after_nested_value_completed() {
+        let mut state = JSONState::Bracket(BracketState::InValue(PrimValue::NestedValueCompleted));
+        let result = parse_bracket(RecursiveStructureType::Close, &mut state);
+        assert_eq!(result, Ok(Token::CloseBracket));
     }
 
     #[test]

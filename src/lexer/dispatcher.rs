@@ -42,9 +42,11 @@ pub fn parse_char(c: char, st: &mut JSONState) -> Result<Token, JSONParseError> 
         JSONState::Brace(BraceState::InValue(
             PrimValue::String(StringState::Closed)
                 | PrimValue::NonString(NonStringState::Completable(_))
+                | PrimValue::NestedValueCompleted
         )) | JSONState::Bracket(BracketState::InValue(
             PrimValue::String(StringState::Closed)
                 | PrimValue::NonString(NonStringState::Completable(_))
+                | PrimValue::NestedValueCompleted
         ))
     );
 
@@ -275,5 +277,38 @@ mod tests {
             st,
             JSONState::Brace(BraceState::InValue(PrimValue::String(StringState::Escaped)))
         );
+    }
+
+    // delimiter check (`in_completable`) correctly handles the `NestedValueCompleted` state.
+    #[test]
+    fn delimiters_preempt_after_nested_value_completed() {
+        // Simulates being in an array after a nested object has just closed: `[ { ... } ,`
+        let mut st_array_comma =
+            JSONState::Bracket(BracketState::InValue(PrimValue::NestedValueCompleted));
+        let res_array_comma = parse_char(',', &mut st_array_comma);
+        assert_eq!(res_array_comma, Ok(Token::Comma));
+        assert_eq!(
+            st_array_comma,
+            JSONState::Bracket(BracketState::ExpectingValue)
+        );
+
+        // Simulates being in an array after a nested object has just closed: `[ { ... } ]`
+        let mut st_array_close =
+            JSONState::Bracket(BracketState::InValue(PrimValue::NestedValueCompleted));
+        let res_array_close = parse_char(']', &mut st_array_close);
+        assert_eq!(res_array_close, Ok(Token::CloseBracket));
+
+        // Simulates being in an object after a nested array has just closed: `{ "k": [...] ,`
+        let mut st_obj_comma =
+            JSONState::Brace(BraceState::InValue(PrimValue::NestedValueCompleted));
+        let res_obj_comma = parse_char(',', &mut st_obj_comma);
+        assert_eq!(res_obj_comma, Ok(Token::Comma));
+        assert_eq!(st_obj_comma, JSONState::Brace(BraceState::ExpectingKey));
+
+        // Simulates being in an object after a nested array has just closed: `{ "k": [...] }`
+        let mut st_obj_close =
+            JSONState::Brace(BraceState::InValue(PrimValue::NestedValueCompleted));
+        let res_obj_close = parse_char('}', &mut st_obj_close);
+        assert_eq!(res_obj_close, Ok(Token::CloseBrace));
     }
 }

@@ -55,12 +55,8 @@ fn perf_deeply_nested_object_5_levels() {
         DEPTH, duration
     );
 
-    // 1. Functionally, it must produce the correct closing string.
     assert_eq!(result, Ok(expected));
 
-    // 2. As a non-functional sanity check, ensure it's very fast.
-    //    On a typical machine, this should be well under a millisecond.
-    //    This assertion prevents performance from regressing unnoticed.
     assert!(
         duration.as_millis() < 50,
         "Performance test took too long: {:?}. This may indicate a performance regression.",
@@ -84,12 +80,8 @@ fn perf_deeply_nested_object_100_levels() {
         DEPTH, duration
     );
 
-    // 1. Functionally, it must produce the correct closing string.
     assert_eq!(result, Ok(expected));
 
-    // 2. As a non-functional sanity check, ensure it's very fast.
-    //    On a typical machine, this should be well under a millisecond.
-    //    This assertion prevents performance from regressing unnoticed.
     assert!(
         duration.as_millis() < 50,
         "Performance test took too long: {:?}. This may indicate a performance regression.",
@@ -113,10 +105,8 @@ fn perf_very_deeply_nested_object_1000_levels() {
         DEPTH, duration
     );
 
-    // 1. Functional check
     assert_eq!(result, Ok(expected));
 
-    // 2. Performance check (with a more lenient time limit for 10x the depth)
     assert!(
         duration.as_millis() < 100,
         "Performance test took too long: {:?}. This may indicate a performance regression.",
@@ -140,7 +130,6 @@ fn perf_very_deeply_nested_object_100_000_levels() {
         DEPTH, duration
     );
 
-    // 1. Functional check
     assert_eq!(result, Ok(expected));
 
     assert!(

@@ -1,5 +1,5 @@
 use crate::{
-    parser::state_types::{BraceState, BracketState, PrimValue, StringState},
+    parser::state_types::{BraceState, BracketState, NonStringState, PrimValue, StringState},
     JSONState,
 };
 
@@ -58,11 +58,15 @@ pub fn parse_quote_char(state: &mut JSONState) -> Result<Token, JSONParseError> 
         }
 
         // --- Case 5: Error conditions ---
-        // A quote is invalid if we're in the middle of a number/literal, or at the very start.
-        JSONState::Brace(BraceState::InValue(PrimValue::NonString(_)))
-        | JSONState::Bracket(BracketState::InValue(PrimValue::NonString(_))) => {
-            Err(JSONParseError::QuoteCharInNonStringData)
-        }
+        // A quote is invalid if we're in the middle of a number/literal, popping out of a nested
+        // value, or at the very start.
+        JSONState::Brace(BraceState::InValue(
+            PrimValue::NonString(_) | PrimValue::NestedValueCompleted,
+        ))
+        | JSONState::Bracket(BracketState::InValue(
+            PrimValue::NonString(_) | PrimValue::NestedValueCompleted,
+        )) => Err(JSONParseError::QuoteCharInNonStringData),
+
         JSONState::Pending => Err(JSONParseError::UnexpectedQuoteChar),
     }
 }
@@ -79,6 +83,24 @@ mod tests {
 
     fn bracket_state(state: BracketState) -> JSONState {
         JSONState::Bracket(state)
+    }
+
+    #[test]
+    fn test_error_quote_after_nested_value_completed() {
+        let mut state_in_brace = brace_state(BraceState::InValue(PrimValue::NestedValueCompleted));
+        let err_brace = parse_quote_char(&mut state_in_brace).unwrap_err();
+        assert!(matches!(
+            err_brace,
+            JSONParseError::QuoteCharInNonStringData
+        ));
+
+        let mut state_in_bracket =
+            bracket_state(BracketState::InValue(PrimValue::NestedValueCompleted));
+        let err_bracket = parse_quote_char(&mut state_in_bracket).unwrap_err();
+        assert!(matches!(
+            err_bracket,
+            JSONParseError::QuoteCharInNonStringData
+        ));
     }
 
     #[test]

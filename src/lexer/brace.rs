@@ -36,7 +36,8 @@ pub fn parse_brace(
                         // Close after a completed value inside the object.
                         InValue(
                             PrimValue::String(StringState::Closed)
-                            | PrimValue::NonString(NonStringState::Completable(_)),
+                            | PrimValue::NonString(NonStringState::Completable(_))
+                            | PrimValue::NestedValueCompleted,
                         ) => Ok(Token::CloseBrace),
                         // Dangling comma, expecting key/value, or any other invalid state.
                         _ => Err(JSONParseError::UnexpectedCloseBrace),
@@ -151,6 +152,13 @@ mod tests {
         )));
         let result = parse_brace(RecursiveStructureType::Close, &mut state);
         assert_eq!(result, Err(JSONParseError::UnexpectedCloseBrace));
+    }
+
+    #[test]
+    fn test_close_brace_after_nested_value_completed() {
+        let mut state = JSONState::Brace(BraceState::InValue(PrimValue::NestedValueCompleted));
+        let result = parse_brace(RecursiveStructureType::Close, &mut state);
+        assert_eq!(result, Ok(Token::CloseBrace));
     }
 
     #[test]
